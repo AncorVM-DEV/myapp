@@ -1,83 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:myapp/proyectos.dart';
-import 'package:myapp/register.dart';
 
-void main() {
-  runApp(const MyApp());
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 255, 133, 11),
-        ),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Fluter Funciona'),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  //todo el tema de controladores y metodos se tienen que crear dentro del stado qeu los usara
+class _RegisterPageState extends State<RegisterPage> {
   // Creamos controladores para cada campo de texto.
   // Estos nos permitirán acceder al texto que el usuario introduce.
   final _userController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   // Es importante liberar los recursos de los controladores cuando el widget ya no se necesite.
   @override
   void dispose() {
     _userController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   void validar() {
     String user = _userController.text;
     String password = _passwordController.text;
+    String confirmPassword = _confirmPasswordController.text;
 
-    if (user.isEmpty || password.isEmpty ) {
+    if (user.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, rellena todos los campos')),
       );
       return; // Detenemos la función si hay campos vacíos.
-    }else{
-      //TODO validacion de usuario para cuando tengo la bd
-      Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => Proyectos()
-            ),
+    } else {
+      if (password != confirmPassword) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('La contraseña ha de ser identica en ambos campos'),
+          ),
         );
+        return; // Detenemos la función si hay campos vacíos.
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Registro completado con éxito!')),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => Proyectos()),
+        );
+        //Y aqui iria la lagica de insercion de datos en la bd pero eso se hara mas adelante
+      }
     }
   }
 
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
         child: SizedBox(
           width: 320,
-          height: 400,
+          height: 350,
           //Card en el que se encuentran los datos del login
           child: Card(
-            color: const Color.fromARGB(255, 255, 133, 11),
+            color: Color.fromARGB(255, 255, 133, 11),
             elevation: 8.0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12.0),
@@ -104,9 +88,8 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 20.0,
-                  ), // Espacio entre los campos de texto
+                  const SizedBox(height: 20.0),
+                  // Espacio entre los campos de texto
                   //Y el espacio para la contraseña
                   TextField(
                     controller: _passwordController,
@@ -120,8 +103,25 @@ class _MyHomePageState extends State<MyHomePage> {
                       prefixIcon: Icon(Icons.lock_outline),
                     ),
                   ),
+
+                  const SizedBox(height: 20.0),
+                  // Espacio entre los campos de texto
+                  //Y el espacio para la contraseña
+                  TextField(
+                    controller: _confirmPasswordController,
+                    obscureText:
+                        true, // Para ocultar el texto (ideal para contraseñas)
+                    decoration: const InputDecoration(
+                      labelText: 'Confirmar contraseña',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock_outline),
+                    ),
+                  ),
+
                   const SizedBox(height: 30.0), // Espacio antes del botón
-                  // Botón de login
+                  // Botón de registro
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color.fromARGB(221, 44, 94, 233),
@@ -136,7 +136,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     icon: const Icon(Icons.login, color: Colors.white),
                     // Ponemos el texto
                     label: const Text(
-                      'LOGIN',
+                      'Registro',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -145,44 +145,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     // El onpressed nos va a llevar a la pagina de proyectos, de momento esta por hacer
                     onPressed: () {
-                      print('Botón de login presionado!');
                       validar();
-                    },
-                  ),
-                  //Despues de un espacion ponemos un boton de registrarse por si el usuario no tiene una cuenta
-                  const SizedBox(height: 35.0),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(221, 44, 94, 233),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 7,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30.0),
-                      ),
-                    ),
-                    icon: const Icon(
-                      Icons.people_alt_sharp,
-                      color: Colors.white,
-                    ),
-
-                    label: const Text(
-                      '¿No tienes cuenta? Creala',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    //Llevamos al usuario a la pagina correspondiente
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const RegisterPage(),
-                        ),
-                      );
                     },
                   ),
                 ],
