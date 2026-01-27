@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:myapp/proyectos.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Importar Auth
+import 'package:cloud_firestore/cloud_firestore.dart'; // Importar Firestore
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});

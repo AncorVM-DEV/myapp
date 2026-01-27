@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:myapp/proyectos.dart';
 import 'package:myapp/register.dart';
+import 'package:firebase_core/firebase_core.dart'; // Importar Core
+import 'package:firebase_auth/firebase_auth.dart'; // Importar Auth
+import 'package:myapp/firebase_options.dart'; // Importar las opciones generadas
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // Necesario para inicializar plugins antes de arrancar la UI
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -52,19 +57,17 @@ class _MyHomePageState extends State<MyHomePage> {
     String user = _userController.text;
     String password = _passwordController.text;
 
-    if (user.isEmpty || password.isEmpty ) {
+    if (user.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, rellena todos los campos')),
       );
       return; // Detenemos la función si hay campos vacíos.
-    }else{
+    } else {
       //TODO validacion de usuario para cuando tengo la bd
       Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => Proyectos()
-            ),
-        );
+        context,
+        MaterialPageRoute(builder: (context) => Proyectos()),
+      );
     }
   }
 

@@ -17,11 +17,11 @@ class Proyectos extends StatelessWidget {
           child: Column(
             children: [
               Container(
-                width: 100,
-                height: 125,
+                width: 250,
+                height: 250,
                 //Esto es un placeholder, hay que cambiarlo
-                child: Image.asset("../media/proyecto.jpg"),
                 margin: EdgeInsets.all(15),
+                child: Image.asset("media/proyecto.png"),
               ),
               const Text(
                 "Proyectos",
