@@ -24,7 +24,7 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  void validar() {
+  void validar() async { // Convertimos el método a async
     String user = _userController.text;
     String password = _passwordController.text;
     String confirmPassword = _confirmPasswordController.text;
@@ -43,14 +43,46 @@ class _RegisterPageState extends State<RegisterPage> {
         );
         return; // Detenemos la función si hay campos vacíos.
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Registro completado con éxito!')),
-        );
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => Proyectos()),
-        );
-        //Y aqui iria la lagica de insercion de datos en la bd pero eso se hara mas adelante
+        try {
+          // Creamos el usuario en Firebase Authentication con un email ficticio
+          UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+            email: '$user@tfg.com', // Añadimos un dominio ficticio
+            password: password,
+          );
+
+          // Creamos el documento en la colección 'users' de Firestore
+          await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
+            'uid': userCredential.user!.uid,
+            'username': user,
+            'createdAt': Timestamp.now(),
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('¡Registro completado con éxito!')),
+          );
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => Proyectos()),
+          );
+        } on FirebaseAuthException catch (e) {
+          if (e.code == 'weak-password') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('La contraseña es demasiado débil')),
+            );
+          } else if (e.code == 'email-already-in-use') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('El usuario ya existe')),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ha ocurrido un error durante el registro')),
+            );
+          }
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ha ocurrido un error inesperado')),
+          );
+        }
       }
     }
   }

@@ -3,6 +3,7 @@ import 'package:myapp/proyectos.dart';
 import 'package:myapp/register.dart';
 import 'package:firebase_core/firebase_core.dart'; // Importar Core
 import 'package:firebase_auth/firebase_auth.dart'; // Importar Auth
+import 'package:cloud_firestore/cloud_firestore.dart'; // Importar Firestore
 import 'package:myapp/firebase_options.dart'; // Importar las opciones generadas
 
 void main() async {
@@ -53,7 +54,7 @@ class _MyHomePageState extends State<MyHomePage> {
     super.dispose();
   }
 
-  void validar() {
+  void validar() async {
     String user = _userController.text;
     String password = _passwordController.text;
 
@@ -63,11 +64,51 @@ class _MyHomePageState extends State<MyHomePage> {
       );
       return; // Detenemos la función si hay campos vacíos.
     } else {
-      //TODO validacion de usuario para cuando tengo la bd
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => Proyectos()),
-      );
+      try {
+        // Usamos el email ficticio para el login
+        UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: '$user@tfg.com',
+          password: password,
+        );
+
+        // Verificamos que el usuario existe en Firestore
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
+
+        if (userDoc.exists) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => Proyectos()),
+          );
+        } else {
+          // Si el usuario no existe en Firestore, cerramos la sesión y mostramos un error
+          await FirebaseAuth.instance.signOut();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No se encontraron datos de usuario. Registrate primero.')),
+          );
+        }
+      } on FirebaseAuthException catch (e) {
+        String message;
+        if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+          message = 'Usuario o contraseña incorrectos.';
+        } else if (e.code == 'wrong-password') {
+          message = 'Usuario o contraseña incorrectos.';
+        } else if (e.code == 'invalid-email') {
+          // Este error no debería ocurrir si el formato de email es siempre user@tfg.com
+          message = 'Error de formato de usuario.';
+        } else {
+          message = 'Error de autenticación. Inténtalo de nuevo.';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ha ocurrido un error inesperado.')),
+        );
+      }
     }
   }
 
