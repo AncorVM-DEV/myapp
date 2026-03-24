@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    Si sirves la app desde una ruta que no es la raíz, cambia el href de abajo.
+    Debe empezar y terminar con "/" para funcionar correctamente.
+    Más info: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+    Este placeholder lo reemplaza Flutter automáticamente al hacer el build.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="ProTask — Gestión de proyectos profesional">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="ProTask">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>ProTask</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- =====================================================================
+       ESTILOS DE LA PANTALLA DE CARGA
+       =====================================================================
+       Todo el CSS está aquí, en el <head>, para que el navegador lo pinte
+       en el primer pixel sin esperar ningún archivo externo. Carga instantánea.
+       ===================================================================== -->
+  <style>
+    /* ── RESET MÍNIMO ─────────────────────────────────────────────────────
+       Solo tocamos lo necesario para que el loader se vea igual en todos
+       los navegadores sin importar sus estilos por defecto.                */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* ── FONDO DE PÁGINA ──────────────────────────────────────────────────
+       Mismo color de fondo que scaffoldBackgroundColor en main.dart.
+       Así no hay ningún parpadeo de color al hacer el fade-out del loader
+       y aparecer Flutter: el fondo siempre se ve igual.
+
+       🎨 CAMBIA AQUÍ EL COLOR DE FONDO para que coincida con tu AppColores.bgDark
+       El valor actual es: #2D3142 (igual que Color(0xFF2D3142) en Flutter)      */
+    html, body {
+      background-color: #2D3142;
+      height: 100%;
+      width: 100%;
+      overflow: hidden; /* Evita el scroll mientras carga */
+    }
+
+    /* ── CONTENEDOR PRINCIPAL DEL LOADER ─────────────────────────────────
+       Ocupa el 100% de la pantalla y centra todo su contenido.
+       La transición de opacidad es la que produce el fade-out elegante
+       cuando Flutter está listo y llama a onEntrypointLoaded.             */
+    #loader {
+      position: fixed;
+      inset: 0;                        /* top:0 right:0 bottom:0 left:0    */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+
+      /* 🎨 CAMBIA AQUÍ EL COLOR DE FONDO DEL LOADER si quieres un gradiente
+         o un color diferente al del body. Actualmente usa el mismo #2D3142. */
+      background: linear-gradient(
+        135deg,
+        #232537 0%,    /* AppColores equivalente a Color(0xFF232537) */
+        #2D3142 100%   /* AppColores.bgDark = Color(0xFF2D3142)      */
+      );
+
+      /* La propiedad que hace el fade-out: cuando quitemos la opacidad
+         con JS, la transición de 0.5s se encarga de que sea suave.       */
+      opacity: 1;
+      transition: opacity 0.5s ease-out;
+
+      /* z-index alto para que tape el canvas de Flutter durante la carga  */
+      z-index: 9999;
+    }
+
+    /* Estado "desapareciendo": lo aplicamos desde JS cuando Flutter carga  */
+    #loader.fade-out {
+      opacity: 0;
+      /* pointer-events none para que el usuario pueda interactuar con Flutter
+         incluso mientras el loader todavía está haciendo el fade            */
+      pointer-events: none;
+    }
+
+    /* ── LOGO ─────────────────────────────────────────────────────────────
+       Animación de pulso suave igual a la que tiene el SplashScreen de Flutter.
+       Así la transición entre el loader HTML y la pantalla de Flutter es
+       prácticamente imperceptible para el usuario.                         */
+    #loader-logo {
+      /* 🖼️  CAMBIA AQUÍ EL TAMAÑO DEL LOGO si lo necesitas más grande o pequeño */
+      width: 110px;
+      height: 110px;
+      object-fit: contain;
+
+      /* Animación de pulso: escala de 0.95 a 1.05 y vuelta, igual que en Flutter */
+      animation: pulse 1.2s ease-in-out infinite;
+
+      /* Sombra sutil para que el logo no flote en el fondo plano            */
+      filter: drop-shadow(0 8px 24px rgba(232, 98, 42, 0.25));
+    }
+
+    /* ── NOMBRE DE LA APP ─────────────────────────────────────────────────
+       Gradiente naranja idéntico al ShaderMask de login.dart y splash.dart  */
+    #loader-title {
+      margin-top: 20px;
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+      /* Gradiente de texto: mismos colores que AppColores.orangePrimary/Light
+         🎨 CAMBIA AQUÍ los colores del gradiente del texto                   */
+      background: linear-gradient(90deg, #E8622A, #F0944D);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── SUBTÍTULO ────────────────────────────────────────────────────────*/
+    #loader-subtitle {
+      margin-top: 6px;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      color: #AAADBF; /* AppColores.textMuted = Color(0xFFAAADBF) */
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* ── SPINNER ──────────────────────────────────────────────────────────
+       Un arco que gira. Sin librerías, solo border + animación CSS.
+       El truco: borde completo en color sutil + un lado en naranja vivo.   */
+    #loader-spinner-wrap {
+      margin-top: 52px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    #loader-spinner {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+
+      /* 🎨 CAMBIA AQUÍ el color del spinner:
+         - El primer color (#4A4E66) es el "arco gris" de fondo
+         - El segundo (#E8622A) es el arco naranja que gira            */
+      border: 3px solid #4A4E66;
+      border-top-color: #E8622A;
+
+      animation: spin 0.9s linear infinite;
+    }
+
+    /* ── TEXTO DE ESTADO ──────────────────────────────────────────────────
+       Cambia dinámicamente desde JS según cuánto tiempo lleva cargando.   */
+    #loader-message {
+      font-size: 14px;
+      color: #AAADBF; /* AppColores.textMuted */
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      text-align: center;
+      max-width: 320px;
+      line-height: 1.5;
+
+      /* Transición suave para el cambio de texto (fade in del nuevo mensaje) */
+      transition: opacity 0.4s ease;
+    }
+
+    /* Clase auxiliar para hacer el fade del texto antes de cambiarlo       */
+    #loader-message.changing {
+      opacity: 0;
+    }
+
+    /* ── ANIMACIONES CSS ──────────────────────────────────────────────────*/
+
+    /* Pulso del logo: escala entre 0.95 y 1.05, igual que en SplashScreen  */
+    @keyframes pulse {
+      0%, 100% { transform: scale(0.95); }
+      50%       { transform: scale(1.05); }
+    }
+
+    /* Giro del spinner */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── RESPONSIVO ───────────────────────────────────────────────────────
+       En pantallas muy pequeñas reducimos un poco el logo y el título      */
+    @media (max-width: 400px) {
+      #loader-logo  { width: 84px; height: 84px; }
+      #loader-title { font-size: 30px; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- =====================================================================
+       PANTALLA DE CARGA NATIVA EN HTML
+       =====================================================================
+       Este div tapa el canvas de Flutter mientras el engine se descarga.
+       Cuando Flutter esté listo, el JS de abajo le aplica la clase .fade-out
+       y después lo elimina del DOM para no consumir memoria.
+       ===================================================================== -->
+  <div id="loader">
+
+    <!-- 🖼️  CAMBIA AQUÍ LA RUTA DE TU LOGO
+         Por defecto apunta a icons/Icon-192.png (ya existe en tu carpeta web/icons).
+         Si tienes un logo personalizado en PNG o SVG, copia el archivo a web/icons/
+         y actualiza el atributo src con el nombre exacto de tu archivo.
+         Ejemplo: src="icons/mi_logo.png"                                    -->
+    <img
+      id="loader-logo"
+      src="icons/Icon-192.png"
+      alt="ProTask logo"
+      draggable="false"
+    />
+
+    <!-- Nombre de la app con gradiente naranja -->
+    <span id="loader-title">Pro Task</span>
+
+    <!-- Subtítulo igual al que aparece en login.dart y splash.dart -->
+    <span id="loader-subtitle">Gestión de proyectos profesional</span>
+
+    <!-- Spinner + mensaje de estado dinámico -->
+    <div id="loader-spinner-wrap">
+      <div id="loader-spinner"></div>
+
+      <!-- El texto inicial; JS lo irá actualizando según el tiempo transcurrido -->
+      <p id="loader-message">Cargando espacio de trabajo...</p>
+    </div>
+
+  </div><!-- /loader -->
+
+
+  <!-- =====================================================================
+       SCRIPT DE CARGA DE FLUTTER
+       =====================================================================
+       flutter_bootstrap.js es el archivo que genera Flutter al hacer el
+       build. Contiene la lógica de descarga del engine y la inicialización.
+       El atributo "async" es CRÍTICO: permite que el navegador muestre el
+       loader HTML mientras descarga Flutter en paralelo.
+       NO elimines ni modifiques este script.
+       ===================================================================== -->
+  <script src="flutter_bootstrap.js" async></script>
+
+
+  <!-- =====================================================================
+       FEEDBACK DINÁMICO Y FADE-OUT
+       =====================================================================
+       Este script gestiona dos cosas:
+         1. Cambiar el texto del loader según cuánto tiempo lleva cargando.
+         2. Detectar cuándo Flutter está listo y hacer el fade-out elegante.
+       ===================================================================== -->
+  <script>
+    (function () {
+      'use strict';
+
+      // ── REFERENCIAS AL DOM ─────────────────────────────────────────────
+      var loader  = document.getElementById('loader');
+      var mensaje = document.getElementById('loader-message');
+
+      // ── FUNCIÓN PARA CAMBIAR EL MENSAJE CON FADE ──────────────────────
+      // Hace fade-out del texto actual → lo cambia → hace fade-in del nuevo.
+      // Así el cambio de mensaje se siente natural y no brusco.
+      function cambiarMensaje(nuevoTexto) {
+        mensaje.classList.add('changing');            // fade-out (0.4s)
+        setTimeout(function () {
+          mensaje.textContent = nuevoTexto;
+          mensaje.classList.remove('changing');       // fade-in (0.4s)
+        }, 400); // Esperamos a que termine el fade-out antes de poner el nuevo texto
+      }
+
+      // ── TEMPORIZADORES DE FEEDBACK ────────────────────────────────────
+      // Si Flutter no ha cargado en 8 segundos → mensaje de espera.
+      // Si no ha cargado en 15 segundos → mensaje de alerta de conexión.
+      // Los guardamos en variables para poder cancelarlos si Flutter carga
+      // antes de que se disparen (evita mensajes innecesarios).
+      var timer8s = setTimeout(function () {
+        cambiarMensaje('Preparando tus proyectos...');
+      }, 8000);
+
+      var timer15s = setTimeout(function () {
+        cambiarMensaje(
+          'Esto está tardando un poco más de lo normal. ' +
+          'Comprueba tu conexión a internet o espera un momento ' +
+          'mientras cargan los recursos pesados.'
+        );
+      }, 15000);
+
+      // ── FUNCIÓN DE OCULTACIÓN DEL LOADER ─────────────────────────────
+      // Esta función se llama cuando Flutter ya está listo para pintar.
+      // Cancela los timers pendientes, aplica el fade-out CSS y elimina
+      // el loader del DOM una vez terminada la transición.
+      function ocultarLoader() {
+        // Cancelamos los timers para que no aparezcan mensajes de "tarda mucho"
+        // en el caso de que Flutter cargue antes de los 8 o 15 segundos
+        clearTimeout(timer8s);
+        clearTimeout(timer15s);
+
+        // Aplicamos la clase que activa la transición CSS (opacity: 0 en 0.5s)
+        loader.classList.add('fade-out');
+
+        // Tras la transición, eliminamos el nodo del DOM completamente.
+        // Esto libera memoria y asegura que el loader no interfiera con Flutter.
+        loader.addEventListener('transitionend', function () {
+          loader.remove();
+        }, { once: true }); // { once: true } → el listener se auto-elimina tras dispararse
+      }
+
+      // ── HOOK CON FLUTTER ─────────────────────────────────────────────
+      // Flutter Web expone el objeto "window._flutter" con métodos para
+      // personalizar la inicialización. El hook "onEntrypointLoaded" se
+      // llama automáticamente cuando el engine está descargado y listo.
+      //
+      // IMPORTANTE: No eliminamos ni reemplazamos flutter_bootstrap.js.
+      // Solo nos "enganchamos" al ciclo de vida que Flutter ya ofrece.
+      window.addEventListener('flutter-first-frame', function () {
+        // flutter-first-frame se dispara cuando Flutter pinta su primer frame.
+        // Es el momento exacto en el que queremos esconder el loader, porque
+        // significa que la app ya es visible y el loader ya no hace falta.
+        ocultarLoader();
+      });
+
+      // ── FALLBACK DE SEGURIDAD ─────────────────────────────────────────
+      // En algunos entornos o versiones de Flutter el evento flutter-first-frame
+      // puede no dispararse (build muy antiguo, error de configuración, etc.).
+      // Este fallback garantiza que el loader desaparezca igualmente a los 20s.
+      var fallbackTimer = setTimeout(function () {
+        if (document.getElementById('loader')) {
+          ocultarLoader();
+        }
+      }, 20000);
+
+      // Si el evento normal sí llega, cancelamos el fallback para no duplicar
+      window.addEventListener('flutter-first-frame', function () {
+        clearTimeout(fallbackTimer);
+      }, { once: true });
+
+    })(); // Función auto-ejecutable: no contamina el scope global con variables
+  </script>
+
+</body>
+</html>
