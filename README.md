@@ -9,6 +9,20 @@
 ---
 
 <details>
+<summary><strong>v29.03.2026</strong> 👥📧 Notificaciones por Email & Proyectos Compartidos (Click para ver detalles)</summary>
+<br>
+
+| ✨ Novedades |
+| :--- |
+| <ul><li><b>Notificaciones por Email:</b> Hemos terminado toda la lógica para que los avisos te lleguen directamente a tu correo electrónico de forma fiable (Quedan hacer test de esto para diferentes situaciones).</li><li><b>Mejoras en la Tabla de Tareas:</b> Se ha pulido el formato visual de la tabla y se ha mejorado su interactividad. Ahora, al hacer click en una tarea desde esta vista, se abrirá el popup completo con toda su información (exactamente igual que en la vista principal), en lugar de solo dejarte cambiar el estado rápidamente.</li><li><b>Roles y Proyectos Compartidos:</b> Hemos desarrollado el sistema de "Compartido conmigo", lo que permite invitar a varios usuarios a un mismo proyecto y asignarles diferentes roles o permisos según lo que necesiten hacer.<ul><li><b>Sistema de Invitaciones:</b> Ahora, al invitar a alguien usando su nombre exacto de usuario, la invitación le aparecerá en estado "Pendiente" dentro de su sección de "Compartido conmigo". Desde ahí, el usuario tendrá la total libertad de aceptar o rechazar unirse al proyecto.</li></ul></li></ul> |
+
+| ⚠️ Pendiente / Known Issues |
+| :--- |
+| <ul><li><b>Fase de Pruebas (Full Test):</b> El objetivo principal ahora es realizar un testeo exhaustivo de toda la aplicación de principio a fin para detectar, documentar y arreglar cualquier posible error (bug) antes de dar la versión por finalizada.</li></ul> |
+
+</details>
+
+<details>
 <summary><strong>v24.03.2026</strong> 📧📂Correos, Archivos Adjuntos & Mejoras de Carga (Click para ver detalles)</summary>
 <br>
 

@@ -1,9 +1,21 @@
-import 'dart:ui';
+// ── PANTALLA: TUS PROYECTOS (INDIVIDUALES) ────────────────────────────────────
+// Muestra ÚNICAMENTE los proyectos donde el usuario actual es el ÚNICO miembro.
+// Los proyectos cooperativos (2+ miembros) se muestran en ProyectosCompartidos.
+//
+// Lógica de consulta (Fase 2 - Objetivo 2):
+//   1. Escuchamos en tiempo real la tabla project_members filtrada por userId.
+//   2. Cuando llegan cambios, ejecutamos _cargarProyectosSolo() de forma asíncrona.
+//   3. Esa función cuenta los miembros de cada proyecto y filtra los que tienen 1.
+//   4. El resultado se guarda en _proyectos y setState() actualiza la UI.
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:myapp/Tareas.dart';
 import 'package:myapp/login.dart';
 import 'package:myapp/main.dart' show supabase;
+import 'package:myapp/proyectos_compartidos.dart';
 import 'package:myapp/widgets/app_colores.dart';
+import 'package:myapp/widgets/app_drawer.dart';
 import 'package:myapp/widgets/proyectos/tarjeta_proyecto.dart';
 import 'package:myapp/widgets/proyectos/centro_notificaciones_global.dart';
 import 'package:myapp/widgets/tareas/barra_busqueda.dart';
@@ -19,38 +31,164 @@ class Proyectos extends StatefulWidget {
 }
 
 class _ProyectosState extends State<Proyectos> {
-  // Los controladores van dentro del State, nota mental por ningun error que llevo varias horas de busqueda en particular
+  // Controladores del formulario de creación de proyecto
   final nombreCont = TextEditingController();
   final descripcionCont = TextEditingController();
-  String? valorSeleccionado = "Por iniciar";
+  String? valorSeleccionado = 'Por iniciar';
 
-  // ── Días de antelación para las notificaciones globales ───────────────────
-  // Por defecto avisamos con 7 días, pero el usuario puede ajustarlo desde
-  // el centro de notificaciones. Solo permite valores: 1, 3, 7 o 15 días.
+  // ── NOTIFICACIONES GLOBALES ────────────────────────────────────────────────
+  // Días de antelación configurados por el usuario para las alertas de tareas.
+  // El valor por defecto es 7 días; el usuario puede cambiarlo desde el centro
+  // de notificaciones. Valores permitidos: 1, 3, 7 o 15.
   int _diasAntelacion = 7;
 
-  // ── IDs de notificaciones leídas (descartadas) en esta sesión ────────────
-  // Guardamos los IDs de las tareas que el usuario ha descartado
-  // del centro de notificaciones. Al cerrar la app se reinicia (solución ligera).
+  // IDs de las tareas que el usuario ya descartó del centro de notificaciones
+  // (se reinician al cerrar la app porque es una solución ligera en memoria)
   final Set<String> _notificacionesLeidas = {};
 
-  // Guardamos un mapa de UUID de proyecto → nombre del proyecto para poder
-  // mostrar el nombre en las notificaciones sin hacer una consulta extra por cada tarea.
-  // Este mapa se rellena cuando llegan los datos de la lista de proyectos.
+  // Caché de UUID → nombre de proyecto para las notificaciones sin consulta extra
   final Map<String, String> _proyectosCache = {};
 
-  // ── BÚSQUEDA ──────────────────────────────────────────────────────────────
-  // Mismo patrón que en Tareas.dart: el controller vive en el State para que
-  // sobreviva a los repintados del StreamBuilder y no pierda el foco al escribir.
+  // ── BÚSQUEDA ───────────────────────────────────────────────────────────────
+  // El controller vive en el State para que sobreviva a los repintados de la UI
+  // y el TextField no pierda el foco mientras el usuario escribe.
   final TextEditingController _busquedaCont = TextEditingController();
   String _textoBusqueda = '';
 
-  // Últimos datos recibidos del stream (para que el filtro funcione en memoria)
-  List<Map<String, dynamic>> _ultimosDatos = [];
+  // ── ESTADO DE LA LISTA ─────────────────────────────────────────────────────
+  // Lista de proyectos individuales (donde el usuario es el único miembro).
+  // Se actualiza mediante _cargarProyectosSolo() al recibir cambios en tiempo real.
+  List<Map<String, dynamic>> _proyectos = [];
+  bool _cargando = true; // Muestra el spinner la primera vez
+
+  // RealtimeChannel para detectar cambios en project_members en tiempo real.
+  // Sustituye a StreamSubscription porque onPostgresChanges detecta INSERT
+  // de filas nuevas, algo que .stream() no hace correctamente.
+  RealtimeChannel? _canalMemberships;
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciarStream();
+  }
+
+  // ── CANAL EN TIEMPO REAL ───────────────────────────────────────────────────
+  // Usamos onPostgresChanges en lugar de .stream() para detectar
+  // correctamente todos los eventos: INSERT (nuevo proyecto), UPDATE
+  // (cambio de rol, status) y DELETE (expulsión o abandono).
+  void _iniciarStream() {
+    final userId = supabase.auth.currentUser!.id;
+
+    // Carga inicial inmediata al abrir la pantalla
+    _cargarProyectosSolo(userId);
+
+    _canalMemberships = supabase
+        .channel('proyectos_solo_${userId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'project_members',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) {
+            if (mounted) _cargarProyectosSolo(userId);
+          },
+        )
+        .subscribe();
+  }
+
+  // ── CARGA Y FILTRADO DE PROYECTOS INDIVIDUALES ────────────────────────────
+  // Consulta en dos pasos para determinar qué proyectos son "solo" del usuario:
+  //   Paso 1: Obtenemos todos los project_id donde el usuario es miembro.
+  //   Paso 2: Contamos cuántos miembros tiene CADA uno de esos proyectos.
+  //   Paso 3: Nos quedamos solo con los que tienen exactamente 1 miembro (el propio usuario).
+  //   Paso 4: Obtenemos los datos completos de esos proyectos de la tabla projects.
+  Future<void> _cargarProyectosSolo(String userId) async {
+    try {
+      // Paso 1: project_ids donde el usuario tiene membresía ACEPTADA
+      // Ignoramos las invitaciones pendientes (status='pending') porque aún
+      // no forman parte activa del proyecto.
+      final misMemberships = await supabase
+          .from('project_members')
+          .select('project_id')
+          .eq('user_id', userId)
+          .eq('status', 'accepted');
+
+      if (misMemberships.isEmpty) {
+        if (mounted)
+          setState(() {
+            _proyectos = [];
+            _cargando = false;
+          });
+        return;
+      }
+
+      final misProjectIds = misMemberships
+          .map((m) => m['project_id'] as String)
+          .toList();
+
+      // Paso 2: todos los miembros ACEPTADOS de esos proyectos (para contar)
+      // Solo contamos aceptados: un pendiente no hace que el proyecto sea "compartido"
+      final todosMiembros = await supabase
+          .from('project_members')
+          .select('project_id')
+          .inFilter('project_id', misProjectIds)
+          .eq('status', 'accepted');
+
+      // Paso 3: contamos miembros por proyecto y filtramos los que tienen exactamente 1
+      final conteoMap = <String, int>{};
+      for (final fila in todosMiembros) {
+        final pid = fila['project_id'] as String;
+        conteoMap[pid] = (conteoMap[pid] ?? 0) + 1;
+      }
+
+      final soloIds = conteoMap.entries
+          .where((e) => e.value == 1) // Solo yo soy miembro
+          .map((e) => e.key)
+          .toList();
+
+      if (soloIds.isEmpty) {
+        if (mounted)
+          setState(() {
+            _proyectos = [];
+            _cargando = false;
+          });
+        return;
+      }
+
+      // Paso 4: datos completos de los proyectos individuales, ordenados por fecha de creación
+      final proyectos = await supabase
+          .from('projects')
+          .select()
+          .inFilter('id', soloIds)
+          .order('created_at', ascending: false);
+
+      // Actualizamos la caché de nombres para el centro de notificaciones
+      for (final p in proyectos) {
+        if (p['id'] != null && p['name'] != null) {
+          _proyectosCache[p['id'] as String] = p['name'] as String;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _proyectos = List<Map<String, dynamic>>.from(proyectos);
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _cargando = false);
+      print('🔴 PROYECTOS: error al cargar proyectos individuales → $e');
+    }
+  }
 
   @override
   void dispose() {
-    //Liberamos todos los contraldores
+    // Eliminamos el canal de Supabase al salir para liberar recursos
+    if (_canalMemberships != null) supabase.removeChannel(_canalMemberships!);
     nombreCont.dispose();
     descripcionCont.dispose();
     _busquedaCont.dispose();
@@ -59,7 +197,7 @@ class _ProyectosState extends State<Proyectos> {
 
   // ── FILTRADO EN CLIENTE ────────────────────────────────────────────────────
   // Comparamos el texto de búsqueda contra el nombre del proyecto.
-  // No hacemos ninguna petición extra a Supabase: filtramos la lista en memoria.
+  // No lanzamos consultas extra a Supabase: filtramos la lista en memoria.
   List<Map<String, dynamic>> _filtrarProyectos(
     List<Map<String, dynamic>> todos,
   ) {
@@ -71,28 +209,27 @@ class _ProyectosState extends State<Proyectos> {
     }).toList();
   }
 
-  //Funcion de subir los proyectos
-  Future<bool> subir(
+  // ── CREAR PROYECTO ─────────────────────────────────────────────────────────
+  // Devuelve true en éxito (para que el diálogo se cierre) y false en error
+  // (para que el botón reactive el spinner y el usuario pueda reintentar).
+  Future<bool> _subir(
     void Function(void Function()) setStateDialog,
     bool Function() montado,
   ) async {
-    String nombreP = nombreCont.text;
-    String descripcionP = descripcionCont.text;
+    final nombreP = nombreCont.text.trim();
+    final descripcionP = descripcionCont.text.trim();
 
     if (nombreP.isEmpty || descripcionP.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Por favor, rellena todos los campos')),
       );
-      // Campos vacíos: le decimos al botón que resetee el spinner
       return false;
     }
 
     try {
-      //Formateamos los datos para supabase
       final userId = supabase.auth.currentUser!.id;
 
-      // Insertamos el proyecto y pedimos que nos devuelva la fila completa
-      // para poder obtener el UUID que PostgreSQL generó automáticamente.
+      // Insertamos el proyecto y obtenemos el UUID generado por PostgreSQL
       final proyectoCreado = await supabase
           .from('projects')
           .insert({
@@ -104,40 +241,27 @@ class _ProyectosState extends State<Proyectos> {
           .select()
           .single();
 
-      // Una vez creado el proyecto, registramos al creador como miembro con
-      // rol 'owner' en la tabla project_members. Así podemos controlar
-      // quién pertenece a qué proyecto y con qué permisos.
-
-      //usamos .upsert() con ignoreDuplicates: true.
-      // - Si el Trigger ya insertó la fila → Supabase la ignora sin error.
-      // - Si el Trigger no existe (otro entorno) → la inserta normalmente.
-      // De las dos formas el resultado es correcto y nunca hay crash.
+      // Registramos al creador como miembro con rol 'owner'.
+      // Usamos upsert con ignoreDuplicates por si el Trigger de la BBDD ya lo insertó.
       await supabase.from('project_members').upsert({
         'project_id': proyectoCreado['id'],
         'user_id': userId,
         'role': 'owner',
       }, ignoreDuplicates: true);
 
-      // ── LIMPIEZA DE CAMPOS ────────────────────────────────────────────────
-      // Limpiamos los campos de texto para que al abrir el diálogo de nuevo
-      // estén vacíos. Antes no se hacía y el usuario veía los datos anteriores.
+      // Limpiamos los campos para la próxima vez que se abra el diálogo
       nombreCont.clear();
       descripcionCont.clear();
 
-      // Comprobamos que el widget sigue en pantalla antes de tocar el contexto
       if (!montado()) return false;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('¡Proyecto creado con éxito!')),
       );
 
-      // ÉXITO: avisamos al botón para que él cierre el diálogo
-      // El StreamBuilder se encargará de refrescar la lista automáticamente.
+      // El stream de project_members detectará el nuevo registro y recargará la lista
       return true;
     } catch (e) {
-      // Si Supabase lanza algún error (red, permisos, constraint...) lo
-      // mostramos en un SnackBar y devolvemos false para que el botón
-      // reactive el spinner y el usuario pueda volver a intentarlo.
       if (montado()) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -150,16 +274,24 @@ class _ProyectosState extends State<Proyectos> {
     }
   }
 
-  // LOGICA DE BORRADO
+  // ── ELIMINAR PROYECTO ──────────────────────────────────────────────────────
+  // PostgreSQL eliminará en cascada tareas, subtareas, comentarios y adjuntos
+  // gracias a las constraints ON DELETE CASCADE definidas en el esquema.
   Future<void> eliminarProyecto(String projectName, String projectId) async {
-    //borramos el proyecto y PostgreSQL se encarga del resto gracias
-    // a "ON DELETE CASCADE": tareas, subtareas, comentarios y adjuntos desaparecen solos.
     await supabase.from('projects').delete().eq('id', projectId);
+
+    // BUG 2 CORREGIDO: antes solo se hacía el .delete() en Supabase pero la UI
+    // no reaccionaba hasta el próximo reload del canal en tiempo real.
+    // Ahora removemos el proyecto de la lista local inmediatamente con setState,
+    // así la tarjeta desaparece al instante sin esperar al siguiente evento.
+    if (mounted) {
+      setState(() {
+        _proyectos.removeWhere((p) => p['id'] == projectId);
+      });
+    }
   }
 
-  // Función auxiliar para mostrar un snackbar desde el contexto raíz de esta pantalla.
-  // La pasamos como callback a los widgets hijos (tarjetas y diálogos) para que puedan
-  // mostrar mensajes sin necesidad de tener acceso directo al contexto del Scaffold.
+  // Callback para que las tarjetas hijas muestren SnackBars sin acceder al contexto directamente
   void _mostrarSnackbar(String mensaje, {bool esError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -171,36 +303,29 @@ class _ProyectosState extends State<Proyectos> {
 
   @override
   Widget build(BuildContext context) {
-    // Sacamos el UUID del usuario una sola vez aquí para usarlo en los streams de esta pantalla.
     final userId = supabase.auth.currentUser!.id;
 
     return Scaffold(
       backgroundColor: AppColores.bgDark,
 
-      // ── FLOATING ACTION BUTTON ─────────────────────────────────────────────
+      // ── FAB: CREAR PROYECTO ────────────────────────────────────────────────
       floatingActionButton: FloatingActionButton(
-        // Tag único para que Flutter no confunda este FAB con los de Tareas.dart
-        // si ambas rutas están en el stack de navegación al mismo tiempo.
-        heroTag: 'fab_crear_proyecto',
+        heroTag:
+            'fab_crear_proyecto', // Tag único para evitar conflicto con otros FABs
         backgroundColor: AppColores.orangePrimary,
         foregroundColor: Colors.white,
         elevation: 6,
         onPressed: () {
           showDialog(
             context: context,
-            // usamos StatefulBuilder en el diálogo
-            // Antes el diálogo era un AlertDialog simple sin estado propio.
-            // Ahora usamos StatefulBuilder para que el botón "Guardar" pueda
-            // mostrar un loader mientras espera a que termine la operación en Supabase.
-            // Esto evita que el usuario pulse dos veces y cree proyectos duplicados.
             builder: (BuildContext dialogContext) {
-              // Variable local al diálogo para controlar el estado del botón
               bool guardando = false;
 
+              // StatefulBuilder nos permite controlar el estado del botón del diálogo
+              // sin necesidad de convertir el diálogo en un StatefulWidget propio.
               return StatefulBuilder(
                 builder: (context, setStateDialog) {
                   return AlertDialog(
-                    //Y aqui creamos el formulario de creacion de los proyectos
                     backgroundColor: AppColores.bgCard,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -213,123 +338,122 @@ class _ProyectosState extends State<Proyectos> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: nombreCont,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            labelText: 'Nombre del proyecto',
-                            labelStyle: const TextStyle(
-                              color: AppColores.textMuted,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFF23253A),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.borderColor,
+                    content: SingleChildScrollView(
+                      // SingleChildScrollView evita overflow cuando se abre el teclado en móvil
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            controller: nombreCont,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Nombre del proyecto',
+                              labelStyle: const TextStyle(
+                                color: AppColores.textMuted,
                               ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.borderColor,
+                              filled: true,
+                              fillColor: const Color(0xFF23253A),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.borderColor,
+                                ),
                               ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.orangePrimary,
-                                width: 2,
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.borderColor,
+                                ),
                               ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: descripcionCont,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            labelText: 'Descripción del proyecto',
-                            labelStyle: const TextStyle(
-                              color: AppColores.textMuted,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFF23253A),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.borderColor,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.borderColor,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.orangePrimary,
-                                width: 2,
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.orangePrimary,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        DropdownButtonFormField<String>(
-                          dropdownColor: AppColores.bgCard,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.borderColor,
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: descripcionCont,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Descripción del proyecto',
+                              labelStyle: const TextStyle(
+                                color: AppColores.textMuted,
                               ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.borderColor,
+                              filled: true,
+                              fillColor: const Color(0xFF23253A),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.borderColor,
+                                ),
                               ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: AppColores.orangePrimary,
-                                width: 2,
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.borderColor,
+                                ),
                               ),
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFF23253A),
-                            labelText: "Estado del proyecto",
-                            labelStyle: const TextStyle(
-                              color: AppColores.textMuted,
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.orangePrimary,
+                                  width: 2,
+                                ),
+                              ),
                             ),
                           ),
-                          items: <String>['Por iniciar', 'En curso', 'Pausado']
-                              .map<DropdownMenuItem<String>>((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              })
-                              .toList(),
-                          onChanged: (String? nuevoValor) {
-                            setState(() {
-                              valorSeleccionado = nuevoValor;
-                            });
-                          },
-                        ),
-                      ],
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField<String>(
+                            dropdownColor: AppColores.bgCard,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.borderColor,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.borderColor,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.orangePrimary,
+                                  width: 2,
+                                ),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFF23253A),
+                              labelText: 'Estado del proyecto',
+                              labelStyle: const TextStyle(
+                                color: AppColores.textMuted,
+                              ),
+                            ),
+                            items:
+                                <String>['Por iniciar', 'En curso', 'Pausado']
+                                    .map(
+                                      (v) => DropdownMenuItem(
+                                        value: v,
+                                        child: Text(v),
+                                      ),
+                                    )
+                                    .toList(),
+                            onChanged: (v) =>
+                                setState(() => valorSeleccionado = v),
+                          ),
+                        ],
+                      ),
                     ),
                     actions: [
                       TextButton(
-                        // Si está guardando bloqueamos el botón Cancelar también
-                        // para que el usuario no cierre el diálogo a medias
                         onPressed: guardando
                             ? null
                             : () => Navigator.pop(context),
@@ -346,37 +470,20 @@ class _ProyectosState extends State<Proyectos> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        //  BOTÓN CON LOADER
-                        // Si ya estamos guardando (guardando == true) pasamos null
-                        // como onPressed para deshabilitar el botón y evitar doble clic
-                        // Esto es igual en tareas.dart
                         onPressed: guardando
                             ? null
                             : () async {
-                                // Activamos el spinner en el botón
                                 setStateDialog(() => guardando = true);
-
-                                // Llamamos a subir(): ahora devuelve bool
-                                // true  → la inserción fue exitosa
-                                // false → campos vacíos o error de Supabase
-                                final exito = await subir(
+                                final exito = await _subir(
                                   setStateDialog,
                                   () => mounted,
                                 );
-
-                                // 'context' aquí es el del StatefulBuilder, que sí
-                                // apunta al diálogo (no al Scaffold padre). Eso
-                                // garantiza que Navigator.pop cierre el diálogo
-                                // y no otra ruta del stack de navegación.
                                 if (exito && mounted) {
                                   Navigator.pop(context);
                                 } else if (mounted) {
-                                  // Hubo error o campos vacíos: apagamos el spinner
-                                  // para que el usuario pueda corregir y reintentar.
                                   setStateDialog(() => guardando = false);
                                 }
                               },
-                        // El botón muestra un spinner o el texto "Guardar" según el estado
                         child: guardando
                             ? const SizedBox(
                                 width: 18,
@@ -398,165 +505,20 @@ class _ProyectosState extends State<Proyectos> {
         child: const Icon(Icons.add),
       ),
 
-      // ── DRAWER
-      drawer: Drawer(
-        backgroundColor: AppColores.bgCard,
-        child: Column(
-          children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF232537), AppColores.bgCard],
-                ),
-                border: Border(
-                  bottom: BorderSide(color: AppColores.borderColor, width: 1),
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset("media/proyecto.png", height: 64, width: 64),
-                  const SizedBox(height: 12),
-                  ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: [
-                        AppColores.orangePrimary,
-                        AppColores.orangeLight,
-                      ],
-                    ).createShader(bounds),
-                    child: const Text(
-                      'Pro Task',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.nombreUsuario,
-                    style: const TextStyle(
-                      color: AppColores.textMuted,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // ── [FASE 1B] MI PERFIL — ahora es el primer ítem del menú ──────
-            // Lo subimos a la primera posición porque es la acción más personal
-            // y frecuente: el usuario quiere ver o actualizar su info antes que
-            // navegar por secciones. Requiere el import de perfil.dart:
-            //   import 'package:myapp/perfil.dart';
-            ListTile(
-              leading: const Icon(
-                Icons.person_rounded,
-                color: AppColores.orangePrimary,
-              ),
-              title: const Text(
-                'Mi perfil',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              onTap: () {
-                Navigator.pop(context); // Cerramos el drawer antes de navegar
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        PerfilPage(nombreUsuario: widget.nombreUsuario),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 4),
-            ListTile(
-              leading: const Icon(
-                Icons.home_rounded,
-                color: AppColores.orangePrimary,
-              ),
-              title: const Text(
-                'Tus proyectos',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              onTap: () => Navigator.pop(context),
-            ),
-            const SizedBox(height: 4),
-            ListTile(
-              leading: const Icon(
-                Icons.people_alt_rounded,
-                color: AppColores.orangePrimary,
-              ),
-              title: const Text(
-                'Compartido contigo',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              onTap: () => Navigator.pop(context),
-            ),
-            // Empuja el botón de cerrar sesión hacia abajo
-            const Spacer(),
-
-            //SafeArea(top: false) añade automáticamente el padding correcto
-            //para la barra de navegación del sistema en cualquier dispositivo,
-            //sin importar si es alta, baja o tiene gestos en lugar de botones.
-            SafeArea(
-              top:
-                  false, // Solo nos interesa el margen inferior, no el superior
-              child: Column(
-                children: [
-                  const Divider(
-                    color: AppColores.borderColor,
-                    indent: 16,
-                    endIndent: 16,
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.logout, color: Color(0xFFFF6B6B)),
-                    title: const Text(
-                      'Cerrar sesión',
-                      style: TextStyle(
-                        color: Color(0xFFFF6B6B),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    onTap: () async {
-                      // Cambiamos FirebaseAuth.instance.signOut() por el equivalente de Supabase.
-                      await supabase.auth.signOut();
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const MyHomePage(title: 'Página de inicio'),
-                        ),
-                        (Route<dynamic> route) => false,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+      // ── DRAWER COMPARTIDO ──────────────────────────────────────────────────
+      // Usamos el AppDrawer reutilizable. Inyectamos los builders de navegación
+      // aquí para evitar que el widget del drawer tenga imports circulares.
+      drawer: AppDrawer(
+        nombreUsuario: widget.nombreUsuario,
+        pantallaActual:
+            PantallaProyectos.misProyectos, // Resalta "Tus proyectos"
+        misProyectosBuilder: () =>
+            Proyectos(nombreUsuario: widget.nombreUsuario),
+        compartidosBuilder: () =>
+            ProyectosCompartidos(nombreUsuario: widget.nombreUsuario),
       ),
 
-      // ── APPBAR ────────────────────────────────────────────────────────────
+      // ── APPBAR ─────────────────────────────────────────────────────────────
       appBar: AppBar(
         centerTitle: true,
         backgroundColor: const Color(0xFF232537),
@@ -580,14 +542,10 @@ class _ProyectosState extends State<Proyectos> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Icon(
-              Icons.folder_rounded,
-              color: AppColores.orangePrimary,
-              size: 20,
-            ),
+            Icon(Icons.home_rounded, color: AppColores.orangePrimary, size: 20),
             SizedBox(width: 8),
             Text(
-              "Tus proyectos",
+              'Tus proyectos',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
@@ -598,10 +556,9 @@ class _ProyectosState extends State<Proyectos> {
         ),
         iconTheme: const IconThemeData(color: AppColores.orangePrimary),
 
-        // ── CAMPANA DE NOTIFICACIONES GLOBAL ─────────────────────────────
-        // Un StreamBuilder cuenta en tiempo real cuántas tareas de TODOS
-        // los proyectos del usuario están dentro del rango de alerta.
-        // Ahora filtramos las finalizadas y las ya descartadas por el usuario.
+        // ── CAMPANA DE NOTIFICACIONES GLOBAL ──────────────────────────────
+        // Cuenta en tiempo real las tareas próximas a su fecha límite.
+        // Filtramos las finalizadas (status == 'done') y las ya descartadas.
         actions: [
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: supabase
@@ -609,20 +566,15 @@ class _ProyectosState extends State<Proyectos> {
                 .stream(primaryKey: ['id'])
                 .eq('created_by', userId),
             builder: (context, snapshot) {
-              // Calculamos cuántas tareas tienen alerta activa
               int contadorAlertas = 0;
               if (snapshot.hasData) {
                 final ahora = DateTime.now();
                 final limiteAlerta = ahora.add(Duration(days: _diasAntelacion));
                 contadorAlertas = snapshot.data!.where((data) {
-                  // Retrocompatibilidad: si no tiene 'due_date' lo saltamos
                   if (data['due_date'] == null) return false;
-                  // No contamos las tareas finalizadas en el badge (status == 'done')
                   if (data['status'] == 'done') return false;
-                  // No contamos las que el usuario ya descartó
                   if (_notificacionesLeidas.contains(data['id'] as String))
                     return false;
-                  // Parseamos la fecha ISO 8601 que nos devuelve Supabase
                   final fecha = DateTime.parse(data['due_date'] as String);
                   return fecha.isBefore(limiteAlerta) ||
                       fecha.isAtSameMomentAs(limiteAlerta);
@@ -631,7 +583,6 @@ class _ProyectosState extends State<Proyectos> {
 
               return Stack(
                 children: [
-                  // Botón de la campana con hitbox corregida
                   MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: IconButton(
@@ -644,16 +595,12 @@ class _ProyectosState extends State<Proyectos> {
                         diasAntelacion: _diasAntelacion,
                         notificacionesLeidas: _notificacionesLeidas,
                         proyectosCache: _proyectosCache,
-                        onCambiarDias: (nuevosDias) {
-                          setState(() => _diasAntelacion = nuevosDias);
-                        },
-                        onActualizarEstado: () {
-                          setState(() {});
-                        },
+                        onCambiarDias: (nuevosDias) =>
+                            setState(() => _diasAntelacion = nuevosDias),
+                        onActualizarEstado: () => setState(() {}),
                       ),
                     ),
                   ),
-                  // Badge rojo, solo visible si hay tareas en alerta
                   if (contadorAlertas > 0)
                     Positioned(
                       right: 6,
@@ -689,7 +636,7 @@ class _ProyectosState extends State<Proyectos> {
         ],
       ),
 
-      // ── BODY ──────────────────────────────────────────────────────────────
+      // ── BODY ───────────────────────────────────────────────────────────────
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -698,11 +645,6 @@ class _ProyectosState extends State<Proyectos> {
             colors: [Color(0xFF232537), AppColores.bgDark],
           ),
         ),
-        // ── SAFE AREA EN EL BODY
-        // Evita que la lista quede tapada por la barra de navegación del
-        // sistema (botones inicio/atrás en Android, home indicator en iPhone).
-        // top: false porque el AppBar ya gestiona el margen superior.
-        // En Web el padding será cero, no afecta a esa plataforma.
         child: SafeArea(
           top: false,
           child: Center(
@@ -710,158 +652,108 @@ class _ProyectosState extends State<Proyectos> {
               constraints: const BoxConstraints(maxWidth: 900),
               child: Column(
                 children: [
-                  // ── BARRA DE BÚSQUEDA: FUERA DEL STREAMBUILDER ────────────
-                  // Mismo patrón que en Tareas.dart.
-                  // Al estar fuera del StreamBuilder, el TextField nunca se
-                  // destruye cuando llegan datos nuevos de Supabase, así que el
-                  // usuario puede escribir sin perder el foco en ningún momento.
+                  // ── BARRA DE BÚSQUEDA ──────────────────────────────────────
+                  // Fuera del builder de la lista para que no pierda el foco
+                  // cuando llegan datos nuevos de Supabase.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                     child: BarraBusqueda(
                       controller: _busquedaCont,
                       placeholder: 'Buscar proyecto por nombre...',
-                      onChanged: (texto) {
-                        // setState solo actualiza _textoBusqueda.
-                        // El controller no se toca, así que el TextField mantiene el foco.
-                        setState(() => _textoBusqueda = texto);
-                      },
+                      onChanged: (texto) =>
+                          setState(() => _textoBusqueda = texto),
                     ),
                   ),
 
-                  Expanded(
-                    child: StreamBuilder<List<Map<String, dynamic>>>(
-                      stream: supabase
-                          .from('projects')
-                          .stream(primaryKey: ['id'])
-                          .eq('created_by', userId),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError)
-                          return Center(
-                            child: Text(
-                              'Error: ${snapshot.error}',
-                              style: const TextStyle(
-                                color: AppColores.textMuted,
-                              ),
-                            ),
-                          );
-
-                        if (snapshot.connectionState ==
-                                ConnectionState.waiting &&
-                            _ultimosDatos.isEmpty)
-                          return const Center(
-                            child: CircularProgressIndicator(
-                              color: AppColores.orangePrimary,
-                            ),
-                          );
-
-                        // Guardamos los datos más recientes del stream
-                        if (snapshot.hasData) {
-                          _ultimosDatos = snapshot.data!;
-                          // Actualizamos la caché de nombres de proyectos para que las
-                          // notificaciones puedan mostrar el nombre en lugar del UUID.
-                          for (final p in _ultimosDatos) {
-                            if (p['id'] != null && p['name'] != null) {
-                              _proyectosCache[p['id'] as String] =
-                                  p['name'] as String;
-                            }
-                          }
-                        }
-
-                        if (_ultimosDatos.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(
-                                  Icons.folder_open_rounded,
-                                  color: AppColores.borderColor,
-                                  size: 72,
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'No tienes proyectos creados aún.',
-                                  style: TextStyle(
-                                    color: AppColores.textMuted,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Pulsa + para crear tu primer proyecto.',
-                                  style: TextStyle(
-                                    color: AppColores.borderColor,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        // Aplicamos el filtro de búsqueda en memoria
-                        final proyectosFiltrados = _filtrarProyectos(
-                          _ultimosDatos,
-                        );
-
-                        // Si el filtro dejó la lista vacía mostramos un estado vacío descriptivo
-                        if (proyectosFiltrados.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(
-                                  Icons.search_off_rounded,
-                                  color: AppColores.borderColor,
-                                  size: 56,
-                                ),
-                                SizedBox(height: 12),
-                                Text(
-                                  'Sin resultados para tu búsqueda.',
-                                  style: TextStyle(
-                                    color: AppColores.textMuted,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        // ── PADDING INFERIOR DINÁMICO ─────────────────────────
-                        // Sumamos al padding inferior la altura de la barra de
-                        // navegación del sistema (MediaQuery) para que la última
-                        // tarjeta nunca quede oculta detrás de los botones del OS.
-                        // En Web y escritorio este valor es 0, así que no cambia nada.
-                        return ListView.builder(
-                          padding: EdgeInsets.only(
-                            top: 8,
-                            left: 12,
-                            right: 12,
-                            bottom: 8 + MediaQuery.of(context).padding.bottom,
-                          ),
-                          itemCount: proyectosFiltrados.length,
-                          itemBuilder: (context, index) {
-                            final data = proyectosFiltrados[index];
-
-                            // Usamos el widget TarjetaProyecto que extraímos a su propio archivo
-                            return TarjetaProyecto(
-                              data: data,
-                              nombreUsuario: widget.nombreUsuario,
-                              onEliminar: eliminarProyecto,
-                              onMostrarSnackbar: _mostrarSnackbar,
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
+                  Expanded(child: _buildContenido()),
                 ],
               ),
-              // Cierra el ConstrainedBox que ahora envuelve el Column
             ),
           ),
         ),
       ),
+    );
+  }
+
+  // ── CONTENIDO DE LA LISTA ──────────────────────────────────────────────────
+  // Separamos el contenido en su propio método para mantener build() legible.
+  Widget _buildContenido() {
+    // Estado de carga inicial (spinner)
+    if (_cargando) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColores.orangePrimary),
+      );
+    }
+
+    // Sin proyectos individuales
+    if (_proyectos.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(
+              Icons.folder_open_rounded,
+              color: AppColores.borderColor,
+              size: 72,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No tienes proyectos individuales aún.',
+              style: TextStyle(color: AppColores.textMuted, fontSize: 16),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Pulsa + para crear tu primer proyecto.',
+              style: TextStyle(color: AppColores.borderColor, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Aplicamos el filtro de búsqueda en memoria
+    final filtrados = _filtrarProyectos(_proyectos);
+
+    if (filtrados.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(
+              Icons.search_off_rounded,
+              color: AppColores.borderColor,
+              size: 56,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Sin resultados para tu búsqueda.',
+              style: TextStyle(color: AppColores.textMuted, fontSize: 15),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── PADDING INFERIOR DINÁMICO ────────────────────────────────────────────
+    // Sumamos la altura de la barra de navegación del sistema para que la última
+    // tarjeta no quede oculta detrás de los botones del OS. En Web es 0.
+    return ListView.builder(
+      padding: EdgeInsets.only(
+        top: 8,
+        left: 12,
+        right: 12,
+        bottom: 8 + MediaQuery.of(context).padding.bottom,
+      ),
+      itemCount: filtrados.length,
+      itemBuilder: (context, index) {
+        final data = filtrados[index];
+        return TarjetaProyecto(
+          data: data,
+          nombreUsuario: widget.nombreUsuario,
+          onEliminar: eliminarProyecto,
+          onMostrarSnackbar: _mostrarSnackbar,
+        );
+      },
     );
   }
 }

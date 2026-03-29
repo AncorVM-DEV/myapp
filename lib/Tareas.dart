@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:myapp/main.dart' show supabase, MyApp;
 import 'package:myapp/proyectos.dart';
 import 'package:myapp/tablaTarea.dart';
-import 'package:myapp/notification_service.dart'; // Servicio de notificaciones push
 import 'package:myapp/widgets/app_colores.dart';
 import 'package:myapp/widgets/tareas/dialogo_info_tarea.dart';
 import 'package:myapp/widgets/tareas/centro_notificaciones_tareas.dart';
@@ -240,42 +239,21 @@ class TareasState extends State<Tareas> {
 
         print("Subida exitosa"); // DEBUG
 
-        // ── PROGRAMAR NOTIFICACIÓN PUSH ───────────────────────────────────
-        // Si la tarea tiene fecha límite programamos una notificación push
-        // nativa en el móvil para que el usuario reciba un aviso N días antes.
-        // En web esta llamada no hace nada (NotificationService lo gestiona).
-        if (fechaLimite != null) {
-          // ── TRY-CATCH INDEPENDIENTE PARA LA NOTIFICACIÓN ─────────────────
-          // PROBLEMA ANTERIOR: la llamada a programarNotificacion lanzaba
-          // PlatformException(exact_alarms_not_permitted) en Android 12+ cuando
-          // el usuario no había concedido el permiso de alarmas exactas en
-          // Ajustes → Aplicaciones → Acceso especial → Alarmas y recordatorios.
-          // Al no capturarse, la excepción interrumpía el bloque exterior y
-          // la tarea quedaba creada en Supabase PERO el diálogo no se cerraba,
-          // dando la falsa impresión de error y provocando duplicados.
-          //
-          // SOLUCIÓN: separamos la notificación en su propio try-catch.
-          // Si falla, simplemente lo registramos en consola y continuamos.
-          // La tarea ya está guardada correctamente; solo se pierde el aviso push.
-          try {
-            // Usamos los milisegundos del momento actual como ID único (mod 2^31)
-            final notifId = DateTime.now().millisecondsSinceEpoch % 2147483647;
-            await NotificationService.programarNotificacion(
-              id: notifId,
-              nombreTarea: nombreT,
-              nombreProyecto: widget.nombreProyecto,
-              fechaLimite: fechaLimite,
-              diasAntelacion: _diasAntelacion,
-            );
-          } catch (errorNotificacion) {
-            // Registramos el error en consola pero NO interrumpimos el flujo.
-            // El usuario verá la tarea creada correctamente aunque el aviso
-            // push no se haya podido programar (permiso no concedido, etc.).
-            print(
-              "AVISO: no se pudo programar la notificación push: $errorNotificacion",
-            );
-          }
-        }
+        // ── FASE 2: NOTIFICACIÓN POR EMAIL (pendiente de conectar) ──────────
+        // Las notificaciones push locales se eliminaron en la Fase 2.
+        // Aquí irá la llamada a EmailService.notificarTareaAsignada() cuando
+        // se implemente la lógica de invitar miembros en el siguiente paso.
+        // Ejemplo de uso futuro:
+        //   if (assignedUserEmail != null) {
+        //     await EmailService.notificarTareaAsignada(
+        //       emailDestinatario: assignedUserEmail,
+        //       nombreDestinatario: assignedUserName,
+        //       nombreTarea: nombreT,
+        //       nombreProyecto: widget.nombreProyecto,
+        //       nombreAsignador: widget.nombreUsuario,
+        //       fechaLimite: fechaLimite,
+        //     );
+        //   }
 
         // Limpiamos
         nombreCont.clear();
@@ -306,13 +284,16 @@ class TareasState extends State<Tareas> {
     return Scaffold(
       backgroundColor: _bgDark,
 
-      // ── FLOATING ACTION BUTTON ─────────────────────────────────────────────
+      // ── FLOATING ACTION BUTTONS ───────────────────────────────────────────
+      // [FIX UX] Los FABs pasan de Column (apilados verticalmente en la esquina
+      // inferior derecha) a Row (uno al lado del otro en la parte inferior central).
+      // Así dejan libres los iconos de las tarjetas (⋮ e info) que quedaban tapados.
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: Padding(
         //Añadimos un margen para los botones
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-        child: Column(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             FloatingActionButton(
               //Esta variable la añadimos para que tenga internamente una diferenciacion completa
@@ -723,8 +704,8 @@ class TareasState extends State<Tareas> {
               },
               child: const Icon(Icons.add),
             ),
-            //margen para que no se solapen
-            const SizedBox(height: 8),
+            // Separación horizontal entre los dos botones
+            const SizedBox(width: 16),
             //boton de mostrar la tabla
             FloatingActionButton(
               // String único para este segundo FAB. Diferente a 'fab_crear_tarea'
@@ -1237,7 +1218,10 @@ class TareasState extends State<Tareas> {
                             top: 8,
                             left: 12,
                             right: 12,
-                            bottom: 8 + MediaQuery.of(context).padding.bottom,
+                            // [FIX UX] 100px extra para que la última tarea
+                            // quede siempre por encima de los botones flotantes
+                            // y el usuario pueda tocarla sin dificultad.
+                            bottom: 100 + MediaQuery.of(context).padding.bottom,
                           ),
                           itemCount: tareasFiltradas.length,
                           itemBuilder: (context, index) {
@@ -1282,8 +1266,20 @@ class TareasState extends State<Tareas> {
                                 ),
                               ),
                               // ── Tarjeta con franja lateral de prioridad ──────────
+                              // [FIX] Eliminamos ListTile porque su `trailing` tiene un
+                              // ancho máximo implícito en Flutter que causa overflow cuando
+                              // hay varios widgets (imagen + popupmenu + iconbutton).
+                              // Reemplazamos por Row + Column explícitos sin restricciones
+                              // de altura fija, lo que permite que el contenido crezca
+                              // libremente y los iconos queden centrados siempre.
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(15),
+                                // [FIX] IntrinsicHeight es imprescindible cuando
+                                // Row usa crossAxisAlignment.stretch sin alturas
+                                // explícitas: le dice a Flutter que calcule la
+                                // altura del Row a partir de los hijos antes de
+                                // aplicar el stretch. Sin él, la altura resultante
+                                // es 0 y las tarjetas desaparecen visualmente.
                                 child: IntrinsicHeight(
                                   child: Row(
                                     crossAxisAlignment:
@@ -1300,74 +1296,91 @@ class TareasState extends State<Tareas> {
                                           ),
                                         ),
                                       ),
-                                      // Contenido principal de la tarjeta
+                                      // Icono de estado a la izquierda del texto
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 12,
+                                        ),
+                                        child: imagenSegunEstado(statusUI),
+                                      ),
+                                      // Bloque de texto central: ocupa todo el espacio libre
+                                      // Expanded evita que empuje a los iconos fuera de pantalla
                                       Expanded(
-                                        child: ListTile(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 16,
-                                                vertical: 8,
-                                              ),
-                                          title: Row(
-                                            children: [
-                                              Text(
-                                                emojiPrioridad(prioridad),
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  // el nombre de la tarea es 'title'
-                                                  data['title'] ?? 'Sin nombre',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 15,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
                                           ),
-                                          subtitle: Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 4,
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  // Mostramos la descripción; el 'owner' ahora es un UUID,
-                                                  // así que mostramos el nombre del usuario de la sesión actual.
-                                                  "${data['description'] ?? 'Sin descripción'} • Por: ${widget.nombreUsuario}",
-                                                  style: const TextStyle(
-                                                    color: _textMuted,
-                                                    fontSize: 12,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // Título de la tarea
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    emojiPrioridad(prioridad),
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                    ),
                                                   ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      // el nombre de la tarea es 'title'
+                                                      data['title'] ??
+                                                          'Sin nombre',
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        fontSize: 15,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 4),
+                                              // Descripción y autor
+                                              Text(
+                                                // Mostramos la descripción; el 'owner' ahora es un UUID,
+                                                // así que mostramos el nombre del usuario de la sesión actual.
+                                                "${data['description'] ?? 'Sin descripción'} • Por: ${widget.nombreUsuario}",
+                                                style: const TextStyle(
+                                                  color: _textMuted,
+                                                  fontSize: 12,
                                                 ),
-                                                if (fechaLimite != null)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 4,
+                                              ),
+                                              // Fecha límite (solo si existe)
+                                              if (fechaLimite != null)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 4,
+                                                      ),
+                                                  child: Row(
+                                                    // [FIX] crossAxisAlignment.center alinea
+                                                    // el icono y el texto verticalmente
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.alarm_rounded,
+                                                        size: 12,
+                                                        color: colorFechaLimite(
+                                                          fechaLimite,
+                                                          _diasAntelacion,
                                                         ),
-                                                    child: Row(
-                                                      children: [
-                                                        Icon(
-                                                          Icons.alarm_rounded,
-                                                          size: 12,
-                                                          color:
-                                                              colorFechaLimite(
-                                                                fechaLimite,
-                                                                _diasAntelacion,
-                                                              ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 4,
-                                                        ),
-                                                        Text(
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      // [FIX] Flexible evita que el texto de fecha
+                                                      // largo (ej. "Venció hace 5 días") se recorte
+                                                      Flexible(
+                                                        child: Text(
                                                           textoFechaLimite(
                                                             fechaLimite,
                                                           ),
@@ -1382,135 +1395,135 @@ class TareasState extends State<Tareas> {
                                                                 FontWeight.w500,
                                                           ),
                                                         ),
-                                                      ],
-                                                    ),
+                                                      ),
+                                                    ],
                                                   ),
-                                              ],
-                                            ),
-                                          ),
-                                          trailing: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Image.asset(
-                                                "media/proyecto.png",
-                                                width: 40,
-                                              ),
-                                              //TODO desplegable para cambiar el estado
-                                              PopupMenuButton<String>(
-                                                color: _bgCard,
-                                                iconColor: _textMuted,
-                                                onSelected: (String result) async {
-                                                  try {
-                                                    await supabase
-                                                        .from('tasks')
-                                                        .update({
-                                                          'status': statusAEnum(
-                                                            result,
-                                                          ),
-                                                        })
-                                                        .eq('id', taskId);
-                                                  } catch (e) {
-                                                    print(
-                                                      'Error actualizando tarea: $e',
-                                                    );
-                                                  }
-                                                },
-                                                itemBuilder:
-                                                    //Drawer de los estados de las tareas
-                                                    (BuildContext context) =>
-                                                        const <
-                                                          PopupMenuEntry<String>
-                                                        >[
-                                                          PopupMenuItem<String>(
-                                                            value:
-                                                                'Por iniciar',
-                                                            child: Text(
-                                                              'Por iniciar',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .white,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          PopupMenuItem<String>(
-                                                            value: 'En curso',
-                                                            child: Text(
-                                                              'En curso',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .white,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          PopupMenuItem<String>(
-                                                            value: 'Pausado',
-                                                            child: Text(
-                                                              'Pausado',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .white,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          PopupMenuItem<String>(
-                                                            value: 'Finalizado',
-                                                            child: Text(
-                                                              'Finalizado',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .white,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                              ),
-                                              MouseRegion(
-                                                cursor:
-                                                    SystemMouseCursors.click,
-                                                child: IconButton(
-                                                  icon: const Icon(
-                                                    Icons.info,
-                                                    color: _textMuted,
-                                                  ),
-                                                  padding: const EdgeInsets.all(
-                                                    12,
-                                                  ),
-                                                  tooltip: 'Ver información',
-                                                  onPressed: () {
-                                                    mostrarDialogoInfoTarea(
-                                                      ctx: context,
-                                                      tareaName:
-                                                          data['title'] ??
-                                                          'Sin nombre',
-                                                      taskDescription:
-                                                          data['description'] ??
-                                                          'Sin descripción',
-                                                      taskEstado: statusUI,
-                                                      taskId: taskId,
-                                                      // Pasamos la prioridad actual para que el diálogo
-                                                      // la muestre pre-seleccionada y permita editarla
-                                                      prioridadActual:
-                                                          data['priority']
-                                                              as String?,
-                                                      fechaLimite: fechaLimite,
-                                                      diasAntelacion:
-                                                          _diasAntelacion,
-                                                      onEliminar: eliminarTarea,
-                                                      onMostrarSnackbar:
-                                                          _mostrarSnackbar,
-                                                    );
-                                                  },
                                                 ),
-                                              ),
                                             ],
                                           ),
-                                          // El icono del estado también usa el texto en español
-                                          leading: imagenSegunEstado(statusUI),
                                         ),
                                       ),
+                                      // Bloque de controles a la derecha: imagen + menú + info
+                                      // Usamos IntrinsicHeight + Column en lugar de trailing
+                                      // para que no haya límite de ancho implícito
+                                      // Bloque de controles: mainAxisSize.min evita
+                                      // que la Column intente ser infinitamente alta
+                                      // cuando se le da altura sin límite en el cross axis.
+                                      Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Image.asset(
+                                            "media/proyecto.png",
+                                            width: 32,
+                                          ),
+                                          //TODO desplegable para cambiar el estado
+                                          PopupMenuButton<String>(
+                                            color: _bgCard,
+                                            iconColor: _textMuted,
+                                            onSelected: (String result) async {
+                                              try {
+                                                await supabase
+                                                    .from('tasks')
+                                                    .update({
+                                                      'status': statusAEnum(
+                                                        result,
+                                                      ),
+                                                    })
+                                                    .eq('id', taskId);
+                                              } catch (e) {
+                                                print(
+                                                  'Error actualizando tarea: $e',
+                                                );
+                                              }
+                                            },
+                                            itemBuilder:
+                                                //Drawer de los estados de las tareas
+                                                (BuildContext context) =>
+                                                    const <
+                                                      PopupMenuEntry<String>
+                                                    >[
+                                                      PopupMenuItem<String>(
+                                                        value: 'Por iniciar',
+                                                        child: Text(
+                                                          'Por iniciar',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      PopupMenuItem<String>(
+                                                        value: 'En curso',
+                                                        child: Text(
+                                                          'En curso',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      PopupMenuItem<String>(
+                                                        value: 'Pausado',
+                                                        child: Text(
+                                                          'Pausado',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      PopupMenuItem<String>(
+                                                        value: 'Finalizado',
+                                                        child: Text(
+                                                          'Finalizado',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                          ),
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: IconButton(
+                                              icon: const Icon(
+                                                Icons.info,
+                                                color: _textMuted,
+                                              ),
+                                              padding: const EdgeInsets.all(8),
+                                              tooltip: 'Ver información',
+                                              onPressed: () {
+                                                mostrarDialogoInfoTarea(
+                                                  ctx: context,
+                                                  tareaName:
+                                                      data['title'] ??
+                                                      'Sin nombre',
+                                                  taskDescription:
+                                                      data['description'] ??
+                                                      'Sin descripción',
+                                                  taskEstado: statusUI,
+                                                  taskId: taskId,
+                                                  // Pasamos la prioridad actual para que el diálogo
+                                                  // la muestre pre-seleccionada y permita editarla
+                                                  prioridadActual:
+                                                      data['priority']
+                                                          as String?,
+                                                  fechaLimite: fechaLimite,
+                                                  diasAntelacion:
+                                                      _diasAntelacion,
+                                                  onEliminar: eliminarTarea,
+                                                  onMostrarSnackbar:
+                                                      _mostrarSnackbar,
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ],
-                                  ),
-                                ),
+                                  ), // Row
+                                ), // IntrinsicHeight
                               ),
                             );
                           },

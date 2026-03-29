@@ -178,162 +178,16 @@ class _MyHomePageState extends State<MyHomePage> {
   // Supabase envía un magic link a ese email para restablecer la contraseña.
   // IMPORTANTE: esto solo funciona si el usuario guardó su email real al registrarse
   // o lo añadió después desde la pantalla de Perfil.
+  // [FIX] El diálogo de recuperación se abre usando un StatefulWidget dedicado
+  // (_DialogoRecuperacion) en lugar de gestionar el TextEditingController aquí.
+  // Esto elimina los crashes "used after being disposed" y el overflow del teclado:
+  // el widget tiene su propio initState/dispose y envuelve el contenido en
+  // SingleChildScrollView para que el teclado de Android no explote la Column.
   void _mostrarDialogoRecuperacion() {
-    // Controlador local al diálogo; lo creamos aquí para poder liberarlo
-    final emailController = TextEditingController();
-
     showDialog(
       context: context,
-      barrierDismissible: true, // Pueden cerrar tocando fuera si se arrepienten
-      builder: (dialogContext) {
-        // Usamos StatefulBuilder para poder mostrar un loader dentro del diálogo
-        // sin tener que convertir todo el widget en StatefulWidget
-        bool enviando = false;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF3A3D52),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFF4A4E66)),
-              ),
-              // Icono y título del diálogo
-              title: const Row(
-                children: [
-                  Icon(Icons.lock_reset, color: Color(0xFFE8622A), size: 26),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Recuperar contraseña',
-                      style: TextStyle(color: Colors.white, fontSize: 18),
-                    ),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Explicación breve para que el usuario sepa qué va a pasar
-                  const Text(
-                    'Introduce tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.',
-                    style: TextStyle(
-                      color: Color(0xFFAAADBF),
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Campo para el email real del usuario
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: Colors.white),
-                    autofocus: true, // Abre el teclado automáticamente
-                    decoration: const InputDecoration(
-                      labelText: 'Correo electrónico',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      hintText: 'ejemplo@correo.com',
-                      hintStyle: TextStyle(color: Color(0xFF4A4E66)),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                // Botón de cancelar, siempre habilitado
-                TextButton(
-                  onPressed: () {
-                    emailController.dispose();
-                    Navigator.pop(dialogContext);
-                  },
-                  child: const Text(
-                    'Cancelar',
-                    style: TextStyle(color: Color(0xFFAAADBF)),
-                  ),
-                ),
-                // Botón de enviar; se deshabilita mientras procesa para evitar doble envío
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8622A),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: enviando
-                      ? null
-                      : () async {
-                          final email = emailController.text.trim();
-
-                          // Validación básica de formato de email antes de llamar a Supabase
-                          if (email.isEmpty || !email.contains('@')) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Introduce un correo electrónico válido.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          // Activamos el estado de "enviando" para mostrar el loader
-                          setDialogState(() => enviando = true);
-
-                          try {
-                            // Llamamos a Supabase para enviar el email de recuperación
-                            // Supabase se encarga de generar el magic link y enviarlo
-                            await supabase.auth.resetPasswordForEmail(email);
-
-                            // Cerramos el diálogo y mostramos confirmación
-                            if (dialogContext.mounted) {
-                              emailController.dispose();
-                              Navigator.pop(dialogContext);
-                            }
-
-                            // Mensaje de éxito fuera del diálogo para que se vea bien
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    '✅ Si ese correo está registrado, recibirás el enlace en breve.',
-                                  ),
-                                  duration: Duration(seconds: 5),
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            // Si falla algo, desactivamos el loader y avisamos
-                            setDialogState(() => enviando = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'No se pudo enviar el correo. Inténtalo de nuevo.',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                  child: enviando
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Enviar enlace',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      barrierDismissible: true,
+      builder: (_) => const _DialogoRecuperacion(),
     );
   }
 
@@ -560,6 +414,179 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── [FIX] DIÁLOGO DE RECUPERACIÓN EXTRAÍDO A WIDGET PROPIO ───────────────────
+// Antes el AlertDialog vivía dentro de showDialog con un TextEditingController
+// creado en el closure. Eso causaba tres problemas en Android:
+//   1. "used after being disposed": el controller se llamaba a .dispose() a mano
+//      en dos callbacks async distintos → race condition.
+//   2. "_dependents.isEmpty is not true": se intentaba navegar mientras el árbol
+//      aún se estaba construyendo (StatefulBuilder + contextos cruzados).
+//   3. RenderFlex overflow de 99835 px: al salir el teclado, la Column sin
+//      scroll explotaba porque AlertDialog no sabe cuánto espacio queda.
+//
+// Solución: este StatefulWidget tiene su propio ciclo de vida completo.
+// El controller se crea en initState y se libera en dispose, que Flutter
+// llama automáticamente cuando el diálogo se cierra. Sin llamadas manuales
+// a .dispose() dentro de callbacks = sin race conditions.
+// El SingleChildScrollView + mainAxisSize.min hacen que el teclado
+// simplemente haga scroll en lugar de reventar el layout.
+class _DialogoRecuperacion extends StatefulWidget {
+  const _DialogoRecuperacion();
+
+  @override
+  State<_DialogoRecuperacion> createState() => _DialogoRecuperacionState();
+}
+
+class _DialogoRecuperacionState extends State<_DialogoRecuperacion> {
+  // Flutter llama a dispose() automáticamente al cerrar el diálogo.
+  // Sin llamadas manuales dentro de callbacks → sin "used after disposed".
+  final _emailController = TextEditingController();
+  bool _enviando = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enviar() async {
+    final email = _emailController.text.trim();
+
+    // Validación básica de formato de email antes de llamar a Supabase
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Introduce un correo electrónico válido.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _enviando = true);
+
+    try {
+      // Llamamos a Supabase para enviar el email de recuperación
+      // Supabase se encarga de generar el magic link y enviarlo
+      await supabase.auth.resetPasswordForEmail(email);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Cierra el diálogo; dispose() se llama solo
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '✅ Si ese correo está registrado, recibirás el enlace en breve.',
+          ),
+          duration: Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _enviando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo enviar el correo. Inténtalo de nuevo.'),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF3A3D52),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFF4A4E66)),
+      ),
+      // Icono y título del diálogo
+      title: const Row(
+        children: [
+          Icon(Icons.lock_reset, color: Color(0xFFE8622A), size: 26),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Recuperar contraseña',
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            ),
+          ),
+        ],
+      ),
+      // [FIX] SingleChildScrollView: cuando el teclado de Android aparece
+      // y reduce el espacio disponible, el contenido hace scroll en lugar
+      // de desbordarse. mainAxisSize.min evita que la Column intente
+      // ocupar altura infinita dentro del diálogo.
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Explicación breve para que el usuario sepa qué va a pasar
+            const Text(
+              'Introduce tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.',
+              style: TextStyle(
+                color: Color(0xFFAAADBF),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Campo para el email real del usuario
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              style: const TextStyle(color: Colors.white),
+              autofocus: true, // Abre el teclado automáticamente
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _enviando ? null : _enviar(),
+              decoration: const InputDecoration(
+                labelText: 'Correo electrónico',
+                prefixIcon: Icon(Icons.email_outlined),
+                hintText: 'ejemplo@correo.com',
+                hintStyle: TextStyle(color: Color(0xFF4A4E66)),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        // Botón de cancelar, siempre habilitado
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: Color(0xFFAAADBF)),
+          ),
+        ),
+        // Botón de enviar; se deshabilita mientras procesa para evitar doble envío
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFE8622A),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          onPressed: _enviando ? null : _enviar,
+          child: _enviando
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text(
+                  'Enviar enlace',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+        ),
+      ],
     );
   }
 }

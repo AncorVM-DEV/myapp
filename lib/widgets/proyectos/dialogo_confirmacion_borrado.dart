@@ -68,7 +68,10 @@ void mostrarConfirmacionBorradoProyecto({
 
               try {
                 await onEliminar(projectName, projectId);
-                onMostrarSnackbar('Tarea eliminada con exito.');
+                // BUG 1 CORREGIDO: el mensaje decía "Tarea eliminada con exito."
+                // pero esta función se usa exclusivamente para eliminar proyectos.
+                // Se corrige el texto y se añade tilde en "éxito".
+                onMostrarSnackbar('Proyecto eliminado con éxito.');
               } catch (e) {
                 onMostrarSnackbar('Error al eliminar: $e', esError: true);
               }

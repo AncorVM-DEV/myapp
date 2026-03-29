@@ -40,18 +40,17 @@ dependencies:
   # y los sustituimos por este único paquete que lo cubre todo: auth, base de datos y storage.
   supabase_flutter: ^2.8.4
 
-  android_intent_plus: ^4.0.0
+ 
   
   gal: ^1.2.0
-  permission_handler: ^11.0.1
+  
   path_provider: ^2.1.4
   # `path_provider` es el único paquete nuevo. Es oficial de Flutter, 100% multiplataforma, +
   # + y lo necesita `descarga_io.dart` para encontrar la carpeta de Descargas en Windows/macOS/Linux.
   
   flutter_localizations:
     sdk: flutter
-  flutter_local_notifications: ^17.2.2
-  timezone: ^0.9.4
+  
   file_picker: ^8.1.2
   url_launcher: ^6.3.1
 
