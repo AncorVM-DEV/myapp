@@ -224,11 +224,69 @@ class TablaTareaState extends State<TablaTarea> {
                 ),
                 const SizedBox(width: 4),
 
-                // ── Icono de flecha que indica que es clicable ──────────
-                const Icon(
-                  Icons.open_in_new_rounded,
-                  size: 11,
-                  color: AppColores.textMuted,
+                // [FIX] Reemplazamos el icono estático por un PopupMenuButton
+                // para cambiar el estado directamente desde la celda de la tabla.
+                // Al usar 'child' en vez de 'icon', PopupMenuButton usa InkWell
+                // internamente y absorbe el tap antes de que llegue al InkWell padre,
+                // evitando que se abra el diálogo completo al tocar este botón.
+                PopupMenuButton<String>(
+                  tooltip: 'Cambiar estado',
+                  padding: EdgeInsets.zero,
+                  color: AppColores.bgCard,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: const BorderSide(color: AppColores.borderColor),
+                  ),
+                  // Icono compacto que indica la acción de cambiar estado
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.swap_vert_rounded,
+                      size: 13,
+                      color: AppColores.textMuted,
+                    ),
+                  ),
+                  onSelected: (nuevoEstado) {
+                    // UPDATE directo a Supabase; el StreamBuilder de la tabla
+                    // actualizará la UI automáticamente vía Realtime.
+                    supabase
+                        .from('tasks')
+                        .update({'status': statusAEnum(nuevoEstado)})
+                        .eq('id', tarea.id);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'Por iniciar',
+                      child: Text(
+                        'Por iniciar',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'En curso',
+                      child: Text(
+                        'En curso',
+                        style: TextStyle(color: Colors.orange, fontSize: 13),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'Pausado',
+                      child: Text(
+                        'Pausado',
+                        style: TextStyle(color: Colors.red, fontSize: 13),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'Finalizado',
+                      child: Text(
+                        'Finalizado',
+                        style: TextStyle(
+                          color: Color(0xFF48D136),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -428,11 +486,15 @@ class TablaTareaState extends State<TablaTarea> {
                     // horizontal toma el control cuando supera el ancho de pantalla.
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 1000),
-                      child: RepaintBoundary(
-                        key: _tableKey,
-                        child: SingleChildScrollView(
-                          // Scroll horizontal para que no se rompa en pantallas estrechas
-                          scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        // Scroll horizontal para que no se rompa en pantallas estrechas
+                        scrollDirection: Axis.horizontal,
+                        child: RepaintBoundary(
+                          // [FIX] RepaintBoundary movido DENTRO del scroll horizontal:
+                          // al estar dentro del scroll, su tamaño es el del DataTable
+                          // completo (no el del viewport). toImage() captura toda la
+                          // tabla, solucionando el recorte de imagen en portrait en Android.
+                          key: _tableKey,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(16),
                             child: DataTable(
@@ -503,8 +565,8 @@ class TablaTareaState extends State<TablaTarea> {
                               ),
                             ),
                           ),
-                        ), // SingleChildScrollView horizontal
-                      ), // RepaintBoundary
+                        ), // RepaintBoundary
+                      ), // SingleChildScrollView horizontal
                     ), // ConstrainedBox
                   ), // Center
                 ), // Padding

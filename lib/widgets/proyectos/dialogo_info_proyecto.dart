@@ -478,574 +478,630 @@ void mostrarDialogoMiembros({
   required String projectName,
   required void Function(String mensaje, {bool esError}) onMostrarSnackbar,
 }) {
+  // [FIX] Usamos _DialogoMiembrosContent (StatefulWidget) en lugar de StatefulBuilder.
+  // Antes, el TextEditingController y el FocusNode se creaban dentro del builder
+  // de showDialog, por lo que Flutter los destruía y reconstruía en cada rebuild
+  // provocado por cambios de MediaQuery (ej. aparición del teclado en Android).
+  // Con un StatefulWidget, initState() se ejecuta UNA SOLA VEZ y dispose() libera
+  // los recursos al cerrar, garantizando que el foco nunca se pierda.
   showDialog(
     context: ctx,
-    builder: (BuildContext membersContext) {
-      // Controller del campo de búsqueda de username
-      final usernameCont = TextEditingController();
-      bool buscando = false;
-      // ── Clave de recarga ─────────────────────────────────────────────────
-      // Cada vez que se invita, expulsa o cambia un rol, incrementamos esta
-      // clave. El FutureBuilder la usa como 'key', lo que fuerza a Flutter
-      // a destruir y recrear el widget → relanza la consulta → lista actualizada.
-      int reloadKey = 0;
+    builder: (context) => _DialogoMiembrosContent(
+      projectId: projectId,
+      projectName: projectName,
+      onMostrarSnackbar: onMostrarSnackbar,
+    ),
+  );
+}
 
-      return StatefulBuilder(
-        builder: (context, setStateLocal) {
-          // ── Id del usuario actual ────────────────────────────────────────
-          final currentUserId = supabase.auth.currentUser!.id;
+// ── WIDGET INTERNO DEL DIÁLOGO DE MIEMBROS ───────────────────────────────────
+// Extraído de mostrarDialogoMiembros para que el TextEditingController y el
+// FocusNode vivan en initState() y sobrevivan a los rebuilds de MediaQuery.
+class _DialogoMiembrosContent extends StatefulWidget {
+  final String projectId;
+  final String projectName;
+  final void Function(String mensaje, {bool esError}) onMostrarSnackbar;
 
-          // ── Invitar por username exacto ──────────────────────────────────
-          // Busca en profiles por username === input. Si existe y no está
-          // en el proyecto, lo añade a project_members con rol 'user'.
-          Future<void> invitarMiembro() async {
-            final username = usernameCont.text.trim();
-            if (username.isEmpty) {
-              onMostrarSnackbar(
-                'Escribe un username para buscar',
-                esError: true,
-              );
-              return;
-            }
+  const _DialogoMiembrosContent({
+    required this.projectId,
+    required this.projectName,
+    required this.onMostrarSnackbar,
+  });
 
-            setStateLocal(() => buscando = true);
+  @override
+  State<_DialogoMiembrosContent> createState() =>
+      _DialogoMiembrosContentState();
+}
 
-            try {
-              // Paso 1: buscar el perfil por username exacto
-              final perfiles = await supabase
-                  .from('profiles')
-                  .select('id, username, full_name, email')
-                  .eq('username', username);
+class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
+  // Controller del campo de búsqueda de username
+  late final TextEditingController _usernameCont;
+  // FocusNode persistente: creado en initState y destruido en dispose.
+  // Al vivir en el State, sobrevive a cualquier rebuild causado por cambios
+  // en MediaQuery (como la aparición del teclado virtual en Android).
+  late final FocusNode _usernameFocusNode;
 
-              if (perfiles.isEmpty) {
-                if (!context.mounted) return;
-                setStateLocal(() => buscando = false);
-                onMostrarSnackbar(
-                  'Usuario "$username" no encontrado',
-                  esError: true,
-                );
-                return;
-              }
+  bool _buscando = false;
 
-              final perfilInvitado = perfiles.first;
-              final invitadoId = perfilInvitado['id'] as String;
+  // ── Future cacheado de miembros ──────────────────────────────────────────
+  // CRÍTICO: guardamos el Future en el State para no recrearlo en cada build().
+  // Si pasáramos _obtenerMiembros() directamente al parámetro future: del
+  // FutureBuilder, Flutter crearía un nuevo objeto Future en cada rebuild
+  // causado por MediaQuery (apertura del teclado), el FutureBuilder volvería
+  // a 'waiting', desmontaría el TextField y el teclado se cerraría solo.
+  late Future<List<Map<String, dynamic>>> _miembrosFuture;
 
-              // No se puede invitar a uno mismo
-              if (invitadoId == currentUserId) {
-                setStateLocal(() => buscando = false);
-                onMostrarSnackbar(
-                  'No puedes invitarte a ti mismo',
-                  esError: true,
-                );
-                return;
-              }
+  // Rol del usuario actual derivado del Future; se actualiza con
+  // addPostFrameCallback para no llamar setState dentro del builder.
+  // Controla si el TextField de invitación se muestra fuera del FutureBuilder,
+  // garantizando que NUNCA se desmonte mientras la lista se recarga.
+  bool _puedeGestionar = false;
 
-              // BUG 3 CORREGIDO: antes se consultaba project_members sin filtrar
-              // por 'status', por lo que una invitación en 'pending' bloqueaba
-              // cualquier reintento y, peor aún, un status NULL (por el upsert
-              // del owner sin campo status) podría causar comportamientos inesperados.
-              // Ahora consultamos el status explícitamente y diferenciamos los casos:
-              //   • 'accepted' → el usuario ya es miembro activo, no tiene sentido reinvitar.
-              //   • 'pending'  → ya tiene una invitación esperando, informamos sin crashear.
-              //   • sin fila   → podemos invitar con total seguridad.
-              // Paso 2: comprobar si ya existe alguna fila para este user en el proyecto
-              final miembrosExistentes = await supabase
-                  .from('project_members')
-                  .select('user_id, status')
-                  .eq('project_id', projectId)
-                  .eq('user_id', invitadoId);
+  @override
+  void initState() {
+    super.initState();
+    _usernameCont = TextEditingController();
+    _usernameFocusNode = FocusNode();
+    // Iniciamos la carga y registramos el callback para conocer el rol propio
+    _miembrosFuture = _obtenerMiembros(widget.projectId);
+    _miembrosFuture.then(_actualizarPuedeGestionar);
+  }
 
-              if (miembrosExistentes.isNotEmpty) {
-                setStateLocal(() => buscando = false);
-                // Leemos el status actual para dar el mensaje adecuado
-                final statusActual =
-                    miembrosExistentes.first['status'] as String?;
-                if (statusActual == 'accepted') {
-                  // Miembro activo: no tiene sentido volver a invitar
-                  onMostrarSnackbar(
-                    '${perfilInvitado['username']} ya es miembro activo del proyecto',
-                    esError: true,
-                  );
-                } else {
-                  // Invitación pendiente: informamos para evitar confusión
-                  onMostrarSnackbar(
-                    '${perfilInvitado['username']} ya tiene una invitación pendiente',
-                    esError: true,
-                  );
-                }
-                return;
-              }
+  @override
+  void dispose() {
+    _usernameCont.dispose();
+    _usernameFocusNode.dispose();
+    super.dispose();
+  }
 
-              // Paso 3: INSERT explícito con los 4 campos obligatorios.
-              // Es imprescindible enviar 'status': 'pending' para que la invitación
-              // aparezca en la pestaña "Proyectos Compartidos" del Usuario B.
-              // Si no se envía este campo, la fila puede quedar con status=null
-              // y la consulta que filtra por status='pending' no la devolvería nunca.
-              await supabase.from('project_members').insert({
-                'project_id': projectId,
-                'user_id': invitadoId,
-                'role': 'user',
-                'status':
-                    'pending', // ← CRÍTICO: sin este campo la invitación es invisible
-              });
+  // ── Actualiza _puedeGestionar cuando el Future resuelve ─────────────────
+  // Llamado en initState y tras cada recarga. Usa mounted para evitar
+  // setState sobre un widget ya desmontado (ej. si el diálogo se cierra
+  // mientras la consulta está en vuelo).
+  void _actualizarPuedeGestionar(List<Map<String, dynamic>> miembros) {
+    if (!mounted) return;
+    final rolActual =
+        miembros
+            .where((m) => m['user_id'] == _currentUserId)
+            .map((m) => m['role'] as String)
+            .firstOrNull ??
+        'user';
+    setState(() => _puedeGestionar = rolActual == 'owner' || rolActual == 'admin');
+  }
 
-              usernameCont.clear();
-              if (!context.mounted) return;
-              setStateLocal(() {
-                buscando = false;
-                reloadKey++;
-              });
-              onMostrarSnackbar(
-                '✅ ${perfilInvitado["full_name"] ?? perfilInvitado["username"]} añadido al proyecto',
-              );
-            } catch (e) {
-              if (!context.mounted) return;
-              setStateLocal(() => buscando = false);
-              onMostrarSnackbar('Error al invitar: $e', esError: true);
-            }
-          }
+  // ── Recarga la lista de miembros ─────────────────────────────────────────
+  // Crea un nuevo Future cacheado. El FutureBuilder muestra el spinner en la
+  // lista durante la recarga, pero el TextField (renderizado FUERA del
+  // FutureBuilder) permanece montado y con foco en todo momento.
+  void _recargarMiembros() {
+    final f = _obtenerMiembros(widget.projectId);
+    f.then(_actualizarPuedeGestionar);
+    setState(() => _miembrosFuture = f);
+  }
 
-          // ── Cambiar rol de un miembro ────────────────────────────────────
-          // ── Cambiar rol de un miembro ────────────────────────────────────
-          Future<void> cambiarRol(String userId, String nuevoRol) async {
-            try {
-              await supabase
-                  .from('project_members')
-                  .update({'role': nuevoRol})
-                  .eq('project_id', projectId)
-                  .eq('user_id', userId);
-              setStateLocal(
-                () => reloadKey++,
-              ); // Incrementar key fuerza rebuild del FutureBuilder
-              onMostrarSnackbar('Rol actualizado correctamente');
-            } catch (e) {
-              onMostrarSnackbar('Error al cambiar rol: $e', esError: true);
-            }
-          }
+  // ── Id del usuario actual ────────────────────────────────────────────────
+  String get _currentUserId => supabase.auth.currentUser!.id;
 
-          // ── Transferir propiedad ─────────────────────────────────────────
-          // Solo el owner puede hacerlo. Hace dos operaciones:
-          //   1. El destinatario pasa a ser 'owner'
-          //   2. El actual owner pasa a ser 'admin'
-          // Así nunca hay un proyecto sin propietario.
-          Future<void> transferirPropiedad(
-            String nuevoOwnerId,
-            String nombre,
-          ) async {
-            try {
-              // Paso 1: el destinatario se convierte en owner
-              await supabase
-                  .from('project_members')
-                  .update({'role': 'owner'})
-                  .eq('project_id', projectId)
-                  .eq('user_id', nuevoOwnerId);
+  // ── Invitar por username exacto ──────────────────────────────────────────
+  // Busca en profiles por username === input. Si existe y no está
+  // en el proyecto, lo añade a project_members con rol 'user'.
+  Future<void> _invitarMiembro() async {
+    final username = _usernameCont.text.trim();
+    if (username.isEmpty) {
+      widget.onMostrarSnackbar('Escribe un username para buscar', esError: true);
+      return;
+    }
 
-              // Paso 2: el owner actual pasa a admin
-              await supabase
-                  .from('project_members')
-                  .update({'role': 'admin'})
-                  .eq('project_id', projectId)
-                  .eq('user_id', currentUserId);
+    setState(() => _buscando = true);
 
-              setStateLocal(() => reloadKey++);
-              onMostrarSnackbar('✅ Propiedad transferida a $nombre');
-            } catch (e) {
-              onMostrarSnackbar(
-                'Error al transferir propiedad: $e',
-                esError: true,
-              );
-            }
-          }
+    try {
+      // Paso 1: buscar el perfil por username exacto
+      final perfiles = await supabase
+          .from('profiles')
+          .select('id, username, full_name, email')
+          .eq('username', username);
 
-          // ── Expulsar miembro ─────────────────────────────────────────────
-          Future<void> expulsarMiembro(String userId, String nombre) async {
-            try {
-              await supabase
-                  .from('project_members')
-                  .delete()
-                  .eq('project_id', projectId)
-                  .eq('user_id', userId);
-              setStateLocal(
-                () => reloadKey++,
-              ); // Incrementar key fuerza rebuild del FutureBuilder
-              onMostrarSnackbar('$nombre ha sido eliminado del proyecto');
-            } catch (e) {
-              onMostrarSnackbar('Error al expulsar miembro: $e', esError: true);
-            }
-          }
+      if (perfiles.isEmpty) {
+        if (!mounted) return;
+        setState(() => _buscando = false);
+        widget.onMostrarSnackbar(
+          'Usuario "$username" no encontrado',
+          esError: true,
+        );
+        return;
+      }
 
-          return Dialog(
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 24,
-            ),
-            backgroundColor: AppColores.bgCard,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: const BorderSide(color: AppColores.borderColor),
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(membersContext).size.height * 0.85,
-                maxWidth: 520,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // ── Cabecera fija ────────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-                    child: Column(
-                      children: [
-                        ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [
-                              AppColores.orangePrimary,
-                              AppColores.orangeLight,
-                            ],
-                          ).createShader(bounds),
-                          child: const Icon(
-                            Icons.people_alt_rounded,
-                            color: Colors.white,
-                            size: 34,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Miembros del proyecto',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 17,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          projectName,
-                          style: const TextStyle(
-                            color: AppColores.orangeLight,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+      final perfilInvitado = perfiles.first;
+      final invitadoId = perfilInvitado['id'] as String;
+
+      // No se puede invitar a uno mismo
+      if (invitadoId == _currentUserId) {
+        setState(() => _buscando = false);
+        widget.onMostrarSnackbar(
+          'No puedes invitarte a ti mismo',
+          esError: true,
+        );
+        return;
+      }
+
+      // BUG 3 CORREGIDO: antes se consultaba project_members sin filtrar
+      // por 'status', por lo que una invitación en 'pending' bloqueaba
+      // cualquier reintento y, peor aún, un status NULL (por el upsert
+      // del owner sin campo status) podría causar comportamientos inesperados.
+      // Ahora consultamos el status explícitamente y diferenciamos los casos:
+      //   • 'accepted' → el usuario ya es miembro activo, no tiene sentido reinvitar.
+      //   • 'pending'  → ya tiene una invitación esperando, informamos sin crashear.
+      //   • sin fila   → podemos invitar con total seguridad.
+      // Paso 2: comprobar si ya existe alguna fila para este user en el proyecto
+      final miembrosExistentes = await supabase
+          .from('project_members')
+          .select('user_id, status')
+          .eq('project_id', widget.projectId)
+          .eq('user_id', invitadoId);
+
+      if (miembrosExistentes.isNotEmpty) {
+        setState(() => _buscando = false);
+        // Leemos el status actual para dar el mensaje adecuado
+        final statusActual = miembrosExistentes.first['status'] as String?;
+        if (statusActual == 'accepted') {
+          // Miembro activo: no tiene sentido volver a invitar
+          widget.onMostrarSnackbar(
+            '${perfilInvitado['username']} ya es miembro activo del proyecto',
+            esError: true,
+          );
+        } else {
+          // Invitación pendiente: informamos para evitar confusión
+          widget.onMostrarSnackbar(
+            '${perfilInvitado['username']} ya tiene una invitación pendiente',
+            esError: true,
+          );
+        }
+        return;
+      }
+
+      // Paso 3: INSERT explícito con los 4 campos obligatorios.
+      // Es imprescindible enviar 'status': 'pending' para que la invitación
+      // aparezca en la pestaña "Proyectos Compartidos" del Usuario B.
+      // Si no se envía este campo, la fila puede quedar con status=null
+      // y la consulta que filtra por status='pending' no la devolvería nunca.
+      await supabase.from('project_members').insert({
+        'project_id': widget.projectId,
+        'user_id': invitadoId,
+        'role': 'user',
+        'status': 'pending', // ← CRÍTICO: sin este campo la invitación es invisible
+      });
+
+      _usernameCont.clear();
+      if (!mounted) return;
+      setState(() => _buscando = false);
+      _recargarMiembros();
+      widget.onMostrarSnackbar(
+        '✅ ${perfilInvitado["full_name"] ?? perfilInvitado["username"]} añadido al proyecto',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _buscando = false);
+      widget.onMostrarSnackbar('Error al invitar: $e', esError: true);
+    }
+  }
+
+  // ── Cambiar rol de un miembro ────────────────────────────────────────────
+  // ── Cambiar rol de un miembro ────────────────────────────────────────────
+  Future<void> _cambiarRol(String userId, String nuevoRol) async {
+    try {
+      await supabase
+          .from('project_members')
+          .update({'role': nuevoRol})
+          .eq('project_id', widget.projectId)
+          .eq('user_id', userId);
+      _recargarMiembros();
+      widget.onMostrarSnackbar('Rol actualizado correctamente');
+    } catch (e) {
+      widget.onMostrarSnackbar('Error al cambiar rol: $e', esError: true);
+    }
+  }
+
+  // ── Transferir propiedad ─────────────────────────────────────────────────
+  // Solo el owner puede hacerlo. Hace dos operaciones:
+  //   1. El destinatario pasa a ser 'owner'
+  //   2. El actual owner pasa a ser 'admin'
+  // Así nunca hay un proyecto sin propietario.
+  Future<void> _transferirPropiedad(String nuevoOwnerId, String nombre) async {
+    try {
+      // Paso 1: el destinatario se convierte en owner
+      await supabase
+          .from('project_members')
+          .update({'role': 'owner'})
+          .eq('project_id', widget.projectId)
+          .eq('user_id', nuevoOwnerId);
+
+      // Paso 2: el owner actual pasa a admin
+      await supabase
+          .from('project_members')
+          .update({'role': 'admin'})
+          .eq('project_id', widget.projectId)
+          .eq('user_id', _currentUserId);
+
+      _recargarMiembros();
+      widget.onMostrarSnackbar('✅ Propiedad transferida a $nombre');
+    } catch (e) {
+      widget.onMostrarSnackbar(
+        'Error al transferir propiedad: $e',
+        esError: true,
+      );
+    }
+  }
+
+  // ── Expulsar miembro ─────────────────────────────────────────────────────
+  Future<void> _expulsarMiembro(String userId, String nombre) async {
+    try {
+      await supabase
+          .from('project_members')
+          .delete()
+          .eq('project_id', widget.projectId)
+          .eq('user_id', userId);
+      _recargarMiembros();
+      widget.onMostrarSnackbar('$nombre ha sido eliminado del proyecto');
+    } catch (e) {
+      widget.onMostrarSnackbar('Error al expulsar miembro: $e', esError: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // [FIX Bug 1] Patrón AlertDialog a prueba de balas para TextField + listas:
+    //   AlertDialog (insetPadding fijo) → content: SizedBox(maxFinite) →
+    //   SingleChildScrollView → Column(min) → ListView(shrinkWrap + NeverScroll).
+    // AlertDialog gestiona automáticamente el espacio del teclado; SizedBox
+    // evita que el diálogo se encoja a lo ancho; la Column hace shrink-wrap;
+    // ListView con NeverScrollableScrollPhysics no pelea con el scroll padre.
+    return AlertDialog(
+      insetPadding: const EdgeInsets.all(20),
+      backgroundColor: AppColores.bgCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColores.borderColor),
+      ),
+      // Manejamos el padding manualmente dentro del content para preservar
+      // el diseño original (cabecera con icono + divider + contenido + botón).
+      titlePadding: EdgeInsets.zero,
+      contentPadding: EdgeInsets.zero,
+      content: SizedBox(
+        // double.maxFinite evita que el AlertDialog encoja el ancho al mínimo
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          // Padding inferior: garantiza que el teclado nunca tape el TextField
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Cabecera ────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+                child: Column(
+                  children: [
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [
+                          AppColores.orangePrimary,
+                          AppColores.orangeLight,
+                        ],
+                      ).createShader(bounds),
+                      child: const Icon(
+                        Icons.people_alt_rounded,
+                        color: Colors.white,
+                        size: 34,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Miembros del proyecto',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.projectName,
+                      style: const TextStyle(
+                        color: AppColores.orangeLight,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-                  const Divider(color: AppColores.borderColor, height: 1),
+              const Divider(color: AppColores.borderColor, height: 1),
 
-                  // ── Contenido desplazable ────────────────────────────────
-                  // CRÍTICO: SingleChildScrollView + mainAxisSize.min para no
-                  // crashear al abrir el teclado en Android/iOS
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // ── Lista de miembros (FutureBuilder) ────────────
-                          // Usamos FutureBuilder en lugar de StreamBuilder para
-                          // evitar rebuild continuo. Cuando el owner hace cambios
-                          // de rol o expulsa, llamamos setStateLocal(() {}) que
-                          // reconstruye el diálogo y relanza el FutureBuilder.
-                          // La key cambia cada vez que reloadKey se incrementa,
-                          // forzando a Flutter a recrear el FutureBuilder y relanzar
-                          // la consulta. Esto da actualización casi en tiempo real.
-                          FutureBuilder<List<Map<String, dynamic>>>(
-                            key: ValueKey(reloadKey),
-                            future: _obtenerMiembros(projectId),
-                            builder: (context, snap) {
-                              if (snap.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 24),
-                                    child: CircularProgressIndicator(
-                                      color: AppColores.orangePrimary,
-                                      strokeWidth: 2.5,
-                                    ),
-                                  ),
-                                );
-                              }
+              // ── Contenido: lista + campo de invitación ───────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Lista de miembros (FutureBuilder cacheado) ────
+                    // _miembrosFuture vive en el State: no se recrea en cada
+                    // build() causado por MediaQuery (apertura del teclado).
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _miembrosFuture,
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: CircularProgressIndicator(
+                                color: AppColores.orangePrimary,
+                                strokeWidth: 2.5,
+                              ),
+                            ),
+                          );
+                        }
 
-                              if (snap.hasError) {
-                                return Text(
-                                  'Error cargando miembros: ${snap.error}',
-                                  style: const TextStyle(
+                        if (snap.hasError) {
+                          return Text(
+                            'Error cargando miembros: ${snap.error}',
+                            style: const TextStyle(
+                              color: AppColores.textMuted,
+                              fontSize: 13,
+                            ),
+                          );
+                        }
+
+                        final miembros = snap.data ?? [];
+                        final rolActual =
+                            miembros
+                                .where((m) => m['user_id'] == _currentUserId)
+                                .map((m) => m['role'] as String)
+                                .firstOrNull ??
+                            'user';
+                        final puedeGestionar =
+                            rolActual == 'owner' || rolActual == 'admin';
+
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Contador de miembros
+                            Row(
+                              children: [
+                                const Text(
+                                  'MIEMBROS ACTUALES',
+                                  style: TextStyle(
                                     color: AppColores.textMuted,
-                                    fontSize: 13,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.8,
                                   ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColores.orangePrimary
+                                        .withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${miembros.length}',
+                                    style: const TextStyle(
+                                      color: AppColores.orangeLight,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+
+                            // ── Lista de filas ──────────────────────
+                            // ListView con shrinkWrap + NeverScrollableScrollPhysics
+                            // para que no pelee con el SingleChildScrollView padre
+                            // ni cause huecos gigantes en el diálogo.
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: miembros.length,
+                              itemBuilder: (context, i) {
+                                final miembro = miembros[i];
+                                final uid = miembro['user_id'] as String;
+                                final rol = miembro['role'] as String;
+                                final perfil =
+                                    miembro['perfil']
+                                        as Map<String, dynamic>?;
+                                final nombre =
+                                    perfil?['full_name'] as String? ??
+                                    perfil?['username'] as String? ??
+                                    'Usuario desconocido';
+                                final username =
+                                    perfil?['username'] as String? ?? '';
+                                final esYo = uid == _currentUserId;
+                                final esOwner = rol == 'owner';
+                                final estado =
+                                    miembro['status'] as String? ?? 'accepted';
+                                final esPendiente = estado == 'pending';
+                                // Los pendientes no pueden gestionar ni ser gestionados
+                                return _FilaMiembro(
+                                  nombre: nombre,
+                                  username: username,
+                                  rol: rol,
+                                  esYo: esYo,
+                                  esOwner: esOwner,
+                                  esPendiente: esPendiente,
+                                  puedeGestionar:
+                                      puedeGestionar &&
+                                      !esYo &&
+                                      !esOwner &&
+                                      !esPendiente,
+                                  puedeTransferir:
+                                      rolActual == 'owner' &&
+                                      !esYo &&
+                                      !esOwner &&
+                                      !esPendiente,
+                                  onCambiarRol: (nuevoRol) =>
+                                      _cambiarRol(uid, nuevoRol),
+                                  onExpulsar: () =>
+                                      _expulsarMiembro(uid, nombre),
+                                  onTransferirPropiedad: () =>
+                                      _transferirPropiedad(uid, nombre),
                                 );
-                              }
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
 
-                              final miembros = snap.data ?? [];
-
-                              // Determinamos el rol del usuario actual en este proyecto
-                              final rolActual =
-                                  miembros
-                                      .where(
-                                        (m) => m['user_id'] == currentUserId,
-                                      )
-                                      .map((m) => m['role'] as String)
-                                      .firstOrNull ??
-                                  'user';
-
-                              // Solo owner y admin pueden gestionar miembros
-                              final puedeGestionar =
-                                  rolActual == 'owner' || rolActual == 'admin';
-
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // ── Número de miembros ───────────────────
-                                  Row(
-                                    children: [
-                                      const Text(
-                                        'MIEMBROS ACTUALES',
-                                        style: TextStyle(
-                                          color: AppColores.textMuted,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.8,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColores.orangePrimary
-                                              .withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '${miembros.length}',
-                                          style: const TextStyle(
-                                            color: AppColores.orangeLight,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                    // ── Campo de invitación (FUERA del FutureBuilder) ──
+                    // CRÍTICO: siempre montado gracias a _puedeGestionar (State).
+                    // Si estuviera dentro del builder, cada recarga (→ waiting)
+                    // lo desmontaría → foco perdido → teclado cerrado.
+                    if (_puedeGestionar) ...[
+                      const SizedBox(height: 16),
+                      const Divider(color: AppColores.borderColor),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'INVITAR MIEMBRO',
+                        style: TextStyle(
+                          color: AppColores.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _usernameCont,
+                              // _usernameFocusNode vive en initState/dispose:
+                              // sobrevive a cualquier rebuild de MediaQuery.
+                              focusNode: _usernameFocusNode,
+                              // Auto-scroll al ganar foco: deja 120px libres
+                              // bajo el campo para que el teclado no lo tape.
+                              scrollPadding: const EdgeInsets.only(bottom: 120),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) => _invitarMiembro(),
+                              decoration: InputDecoration(
+                                hintText: 'Username exacto del usuario',
+                                hintStyle: const TextStyle(
+                                  color: AppColores.textMuted,
+                                  fontSize: 13,
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.alternate_email_rounded,
+                                  color: AppColores.textMuted,
+                                  size: 18,
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF23253A),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: AppColores.borderColor,
                                   ),
-                                  const SizedBox(height: 10),
-
-                                  // ── Filas de miembros ────────────────────
-                                  ...miembros.map((miembro) {
-                                    final uid = miembro['user_id'] as String;
-                                    final rol = miembro['role'] as String;
-                                    final perfil =
-                                        miembro['perfil']
-                                            as Map<String, dynamic>?;
-                                    final nombre =
-                                        perfil?['full_name'] as String? ??
-                                        perfil?['username'] as String? ??
-                                        'Usuario desconocido';
-                                    final username =
-                                        perfil?['username'] as String? ?? '';
-                                    final esYo = uid == currentUserId;
-                                    final esOwner = rol == 'owner';
-
-                                    final estado =
-                                        miembro['status'] as String? ??
-                                        'accepted';
-                                    final esPendiente = estado == 'pending';
-                                    return _FilaMiembro(
-                                      nombre: nombre,
-                                      username: username,
-                                      rol: rol,
-                                      esYo: esYo,
-                                      esOwner: esOwner,
-                                      esPendiente: esPendiente,
-                                      // Los pendientes no pueden gestionar ni ser gestionados
-                                      puedeGestionar:
-                                          puedeGestionar &&
-                                          !esYo &&
-                                          !esOwner &&
-                                          !esPendiente,
-                                      puedeTransferir:
-                                          rolActual == 'owner' &&
-                                          !esYo &&
-                                          !esOwner &&
-                                          !esPendiente,
-                                      onCambiarRol: (nuevoRol) =>
-                                          cambiarRol(uid, nuevoRol),
-                                      onExpulsar: () =>
-                                          expulsarMiembro(uid, nombre),
-                                      onTransferirPropiedad: () =>
-                                          transferirPropiedad(uid, nombre),
-                                    );
-                                  }),
-
-                                  const SizedBox(height: 16),
-
-                                  // ── Campo de invitación (solo si puede gestionar) ──
-                                  if (puedeGestionar) ...[
-                                    const Divider(
-                                      color: AppColores.borderColor,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    const Text(
-                                      'INVITAR MIEMBRO',
-                                      style: TextStyle(
-                                        color: AppColores.textMuted,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.8,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                    color: AppColores.orangePrimary,
+                                    width: 2,
+                                  ),
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Botón de invitar con spinner mientras busca
+                          SizedBox(
+                            height: 44,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColores.orangePrimary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                              ),
+                              onPressed: _buscando ? null : _invitarMiembro,
+                              child: _buscando
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
                                       ),
+                                    )
+                                  : const Icon(
+                                      Icons.person_add_rounded,
+                                      size: 20,
                                     ),
-                                    const SizedBox(height: 8),
-                                    // Usamos Row con Expanded + botón para que no
-                                    // desborde en móvil al abrirse el teclado
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: usernameCont,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14,
-                                            ),
-                                            textInputAction:
-                                                TextInputAction.send,
-                                            onSubmitted: (_) =>
-                                                invitarMiembro(),
-                                            decoration: InputDecoration(
-                                              hintText:
-                                                  'Username exacto del usuario',
-                                              hintStyle: const TextStyle(
-                                                color: AppColores.textMuted,
-                                                fontSize: 13,
-                                              ),
-                                              prefixIcon: const Icon(
-                                                Icons.alternate_email_rounded,
-                                                color: AppColores.textMuted,
-                                                size: 18,
-                                              ),
-                                              filled: true,
-                                              fillColor: const Color(
-                                                0xFF23253A,
-                                              ),
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 10,
-                                                  ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                borderSide: const BorderSide(
-                                                  color: AppColores.borderColor,
-                                                ),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                borderSide: const BorderSide(
-                                                  color:
-                                                      AppColores.orangePrimary,
-                                                  width: 2,
-                                                ),
-                                              ),
-                                              border: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        // Botón de invitar con spinner mientras busca
-                                        SizedBox(
-                                          height: 44,
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  AppColores.orangePrimary,
-                                              foregroundColor: Colors.white,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 16,
-                                                  ),
-                                            ),
-                                            onPressed: buscando
-                                                ? null
-                                                : invitarMiembro,
-                                            child: buscando
-                                                ? const SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          color: Colors.white,
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  )
-                                                : const Icon(
-                                                    Icons.person_add_rounded,
-                                                    size: 20,
-                                                  ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      'El usuario debe estar registrado en ProTask.',
-                                      style: TextStyle(
-                                        color: AppColores.textMuted,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-
-                                  const SizedBox(height: 8),
-                                ],
-                              );
-                            },
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-
-                  // ── Botón cerrar fijo ────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColores.borderColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                          vertical: 10,
+                      const SizedBox(height: 4),
+                      const Text(
+                        'El usuario debe estar registrado en ProTask.',
+                        style: TextStyle(
+                          color: AppColores.textMuted,
+                          fontSize: 11,
                         ),
                       ),
-                      onPressed: () => Navigator.pop(membersContext),
-                      child: const Text('Cerrar'),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                ),
+              ),
+
+              // ── Botón Cerrar ─────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColores.borderColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 10,
                     ),
                   ),
-                ],
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cerrar'),
+                ),
               ),
-            ),
-          );
-        },
-      );
-    },
-  );
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ── QUERY: obtener miembros con perfil ────────────────────────────────────────

@@ -66,6 +66,12 @@ class _ProyectosState extends State<Proyectos> {
   // de filas nuevas, algo que .stream() no hace correctamente.
   RealtimeChannel? _canalMemberships;
 
+  // [FIX] Canal secundario que escucha INSERT y UPDATE directamente en la tabla
+  // 'projects'. Sin él, editar el nombre, descripción o estado de un proyecto
+  // no se reflejaba en la lista porque _canalMemberships solo escucha
+  // cambios en 'project_members', no en 'projects'.
+  RealtimeChannel? _canalProyectos;
+
   @override
   void initState() {
     super.initState();
@@ -88,11 +94,29 @@ class _ProyectosState extends State<Proyectos> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'project_members',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: userId,
-          ),
+          // [FIX] Se elimina el filtro server-side: los filtered channels requieren
+          // Realtime RLS activado; sin esa configuración el callback nunca dispara.
+          // Ahora filtramos en el cliente dentro del callback, igual que hace
+          // proyectos_compartidos.dart, para no disparar recargas innecesarias.
+          callback: (payload) {
+            final uidNuevo = payload.newRecord['user_id'] as String?;
+            final uidViejo = payload.oldRecord['user_id'] as String?;
+            if (mounted && (uidNuevo == userId || uidViejo == userId)) {
+              _cargarProyectosSolo(userId);
+            }
+          },
+        )
+        .subscribe();
+
+    // [FIX] Canal adicional para la tabla 'projects': detecta CREATE (INSERT) y
+    // EDIT/CAMBIO DE ESTADO (UPDATE). Sin filtro server-side por el mismo motivo
+    // que _canalMemberships. _cargarProyectosSolo filtra por membresía del usuario.
+    _canalProyectos = supabase
+        .channel('proyectos_cambios_${userId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'projects',
           callback: (_) {
             if (mounted) _cargarProyectosSolo(userId);
           },
@@ -189,6 +213,8 @@ class _ProyectosState extends State<Proyectos> {
   void dispose() {
     // Eliminamos el canal de Supabase al salir para liberar recursos
     if (_canalMemberships != null) supabase.removeChannel(_canalMemberships!);
+    // [FIX] Liberamos también el canal secundario de la tabla 'projects'
+    if (_canalProyectos != null) supabase.removeChannel(_canalProyectos!);
     nombreCont.dispose();
     descripcionCont.dispose();
     _busquedaCont.dispose();
@@ -258,6 +284,10 @@ class _ProyectosState extends State<Proyectos> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('¡Proyecto creado con éxito!')),
       );
+
+      // [FIX] Forzamos recarga inmediata de la lista sin esperar al canal Realtime,
+      // garantizando que el nuevo proyecto aparezca al instante en cualquier entorno.
+      _cargarProyectosSolo(userId);
 
       // El stream de project_members detectará el nuevo registro y recargará la lista
       return true;

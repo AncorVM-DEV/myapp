@@ -62,6 +62,9 @@ void mostrarDialogoInfoTarea({
       // del closure interno.
       DateTime? fechaEditable = fechaLimite;
       String prioridadEditable = prioridadActual ?? 'none';
+      // [FIX] Estado editable en el closure externo (misma razón que prioridadEditable):
+      // vive fuera del StatefulBuilder para no resetearse en cada setStateLocal().
+      String statusEditable = taskEstado;
       bool guardando = false;
 
       return StatefulBuilder(
@@ -97,6 +100,9 @@ void mostrarDialogoInfoTarea({
                     'priority': prioridadEditable, // ← prioridad elegida
                     'due_date': fechaEditable
                         ?.toIso8601String(), // ← fecha elegida (null = borrar)
+                    // [FIX] Incluimos también el estado actual para que "Guardar cambios"
+                    // persista cualquier estado que el usuario haya elegido en el dropdown.
+                    'status': statusAEnum(statusEditable),
                   })
                   .eq('id', taskId);
 
@@ -288,46 +294,85 @@ void mostrarDialogoInfoTarea({
                           ),
                           const SizedBox(height: 12),
 
-                          // ── Estado actual de la tarea (solo lectura aquí) ──
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
+                          // [FIX] El bloque de estado de solo lectura se sustituye por un
+                          // DropdownButtonFormField editable que hace el UPDATE a Supabase
+                          // de forma inmediata al cambiar, sin necesidad de "Guardar cambios".
+                          _etiquetaCampo('ESTADO'),
+                          const SizedBox(height: 4),
+                          DropdownButtonFormField<String>(
+                            value: statusEditable,
+                            dropdownColor: AppColores.bgCard,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
                             ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF23253A),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: AppColores.borderColor),
-                            ),
-                            child: Row(
-                              children: [
-                                imagenSegunEstado(taskEstado),
-                                const SizedBox(width: 10),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'ESTADO ACTUAL',
-                                      style: TextStyle(
-                                        color: AppColores.textMuted,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.8,
-                                      ),
-                                    ),
-                                    Text(
-                                      taskEstado,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: const Color(0xFF23253A),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.borderColor,
                                 ),
-                              ],
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(
+                                  color: AppColores.orangePrimary,
+                                  width: 2,
+                                ),
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              // El icono de estado cambia en tiempo real según la selección
+                              prefixIcon: imagenSegunEstado(statusEditable),
                             ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'Por iniciar',
+                                child: Text('Por iniciar'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'En curso',
+                                child: Text('En curso'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'Pausado',
+                                child: Text('Pausado'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'Finalizado',
+                                child: Text('Finalizado'),
+                              ),
+                            ],
+                            onChanged: (nuevoEstado) async {
+                              if (nuevoEstado == null) return;
+                              // Actualizamos la variable del closure y reconstruimos
+                              // para refrescar el icono del prefixIcon inmediatamente.
+                              setStateLocal(() => statusEditable = nuevoEstado);
+                              try {
+                                // UPDATE inmediato a Supabase sin esperar a "Guardar cambios"
+                                await supabase
+                                    .from('tasks')
+                                    .update({
+                                      'status': statusAEnum(nuevoEstado),
+                                    })
+                                    .eq('id', taskId);
+                                onMostrarSnackbar(
+                                  'Estado cambiado a "$nuevoEstado"',
+                                );
+                              } catch (e) {
+                                onMostrarSnackbar(
+                                  'Error al cambiar estado: $e',
+                                  esError: true,
+                                );
+                              }
+                            },
                           ),
                           const SizedBox(height: 12),
 

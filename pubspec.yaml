@@ -53,17 +53,30 @@ dependencies:
   
   file_picker: ^8.1.2
   url_launcher: ^6.3.1
+  flutter_dotenv: ^5.2.1 # Carga variables de entorno desde .env (credenciales fuera del código)
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  # Genera los iconos de launcher para Android, Web y Windows a partir de
+  # un único archivo PNG fuente. Ejecutar con:
+  #   flutter pub run flutter_launcher_icons
+  flutter_launcher_icons: ^0.14.3
+
+# ── Configuración de flutter_launcher_icons ───────────────────────────────────
+flutter_launcher_icons:
+  android: true           # Genera iconos en android/app/src/main/res/mipmap-*
+  ios: false              # Sin carpeta iOS en este proyecto
+  image_path: "media/proyecto.png"
+  web:
+    generate: true
+    image_path: "media/proyecto.png"
+    background_color: "#2D3142"   # AppColores.bgDark
+  windows:
+    generate: true
+    image_path: "media/proyecto.png"
+    icon_size: 48         # Tamaño recomendado para el icono de la barra de título
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
@@ -77,6 +90,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - .env              # Variables de entorno (Supabase URL y ANON_KEY)
     - media/proyecto.png
   #   - images/a_dot_ham.jpeg
 

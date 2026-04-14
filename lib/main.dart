@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // Carga credenciales desde .env
 import 'package:flutter_localizations/flutter_localizations.dart'; // Para el calendario en español
 import 'package:supabase_flutter/supabase_flutter.dart';
 // ── FASE 2: NotificationService eliminado ─────────────────────────────────────
@@ -10,11 +11,13 @@ import 'package:myapp/splash.dart'; // [FASE 1A] Pantalla de carga con timeout y
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Necesario para inicializar plugins antes de arrancar la UI
 
+  // Cargamos las variables de entorno desde .env antes de inicializar Supabase
+  await dotenv.load(fileName: '.env');
+
   // Inicializamos Supabase con la URL y la clave pública del proyecto
   await Supabase.initialize(
-    url: 'https://rmnurofyjnoonqdzwwdy.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtbnVyb2Z5am5vb25xZHp3d2R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMDEwMDAsImV4cCI6MjA4Nzg3NzAwMH0.FuCEuXUadRLuhzkAy0ZwiLDJ48SANdJO1ci4rNYk2WY',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   // ── FASE 2: ya no llamamos a NotificationService.init() ───────────────────

@@ -9,6 +9,24 @@
 ---
 
 <details>
+<summary><strong>v13.04.2026</strong> 🚀 Seguridad, Branding y Corrección Maestra de UI/UX (Click para ver detalles)</summary>
+<br>
+
+| ✨ Novedades, Seguridad y Branding |
+| :--- |
+| <ul><li><b>Identidad Visual (ProTask):</b> La aplicación ha dejado de ser genérica. Se ha renombrado oficialmente como <b>ProTask</b> en todas las plataformas (Android, iOS, Windows y Web) y se ha implementado el logo oficial usando <code>media/proyecto.png</code> como icono nativo.</li><li><b>Seguridad de Credenciales (.env):</b> Se ha implementado un sistema de variables de entorno con <code>flutter_dotenv</code>. La URL y la API Key de Supabase ya no están expuestas en el código fuente; ahora residen en un archivo <code>.env</code> protegido por <code>.gitignore</code> para un despliegue seguro en GitHub.</li><li><b>Sincronización en Tiempo Real (Proyectos):</b> Integración total de Supabase Realtime para la tabla de proyectos. Los cambios (creación, edición, estado) se reflejan instantáneamente en la interfaz de todos los miembros sin necesidad de recargar.</li><li><b>Gestión de Tareas Ágil:</b> Se ha añadido la capacidad de cambiar el estado de las tareas directamente desde la vista de Tabla (vía PopupMenu) y desde el diálogo de información, sincronizando los cambios inmediatamente con la BD.</li></ul> |
+
+| 🐛 Correcciones Críticas de UI/UX |
+| :--- |
+| <ul><li><b>Solución Definitiva al Teclado (Android):</b> Se ha corregido el error de pérdida de foco y cierre del teclado en el diálogo de invitados. Se reestructuró la jerarquía usando un <code>StatefulWidget</code> dedicado, <code>SingleChildScrollView</code> y <code>shrinkWrap</code> para que el cuadro se adapte perfectamente al espacio del teclado sin errores de <i>overflow</i>.</li><li><b>Tabla Responsive & Captura Completa:</b> Se ha implementado scroll horizontal nativo en la tabla de tareas. Además, se reubicó el <code>RepaintBoundary</code> para permitir descargas de imágenes completas de la tabla, incluso si el contenido desborda la pantalla vertical en móviles.</li></ul> |
+
+| ⚠️ Pendiente / Known Issues |
+| :--- |
+| <ul><li><b>Mantenimiento:</b> Recordar generar siempre el archivo <code>.env</code> localmente al clonar el repositorio en máquinas nuevas, ya que está excluido por seguridad.</li></ul> |
+
+</details>
+
+<details>
 <summary><strong>v29.03.2026</strong> 👥📧 Notificaciones por Email & Proyectos Compartidos (Click para ver detalles)</summary>
 <br>
 
