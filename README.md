@@ -1,5 +1,91 @@
 # PRO TASK
 
+> Aplicación de gestión de proyectos y tareas desarrollada con **Flutter** y **Supabase**, disponible en Web, Windows, Android e iOS.
+
+---
+
+## 📋 Índice
+
+- [🛠️ Guía de Instalación y Configuración](#️-guía-de-instalación-y-configuración)
+  - [1. Requisitos Previos](#1-requisitos-previos)
+  - [2. Preparación del Entorno](#2-preparación-del-entorno)
+  - [3. Instalación del Proyecto](#3-instalación-del-proyecto)
+  - [4. Configuración de Seguridad (.env)](#4-configuración-de-seguridad-env)
+  - [5. Ejecución](#5-ejecución)
+- [📝 Notas de la Versión](#-notas-de-la-versión)
+
+---
+
+## 🛠️ Guía de Instalación y Configuración
+
+Este es un **proyecto intermodular** desarrollado con Flutter y Supabase. Por motivos de seguridad y siguiendo las mejores prácticas de desarrollo, las credenciales de acceso a la base de datos **no están incluidas** en el código fuente ni en el repositorio.
+
+### 1. Requisitos Previos
+
+Antes de comenzar, asegúrate de tener instalado:
+
+| Herramienta | Descripción |
+| :--- | :--- |
+| **Flutter SDK** | [Guía oficial de instalación](https://docs.flutter.dev/get-started/install) |
+| **Visual Studio Code** | Con las extensiones oficiales de **Flutter** y **Dart** instaladas (disponibles en el Marketplace como `Flutter`) |
+| **Git** | Para clonar el repositorio |
+
+### 2. Preparación del Entorno
+
+Ejecuta el siguiente comando en tu terminal para verificar que tu entorno de desarrollo está listo:
+
+```bash
+flutter doctor
+```
+
+Si falta algún componente o SDK, sigue las instrucciones que te indique la terminal para completar la instalación.
+
+### 3. Instalación del Proyecto
+
+**Paso 1 — Clonar el repositorio:**
+
+```bash
+git clone https://github.com/AncorVM-DEV/myapp.git
+cd myapp
+```
+
+**Paso 2 — Instalar dependencias:**
+
+Una vez dentro de la carpeta del proyecto, descarga todas las librerías necesarias:
+
+```bash
+flutter pub get
+```
+
+### 4. Configuración de Seguridad (.env)
+
+Este proyecto utiliza `flutter_dotenv` para gestionar variables de entorno de forma segura. Para que la aplicación pueda conectarse a la base de datos, sigue estos pasos:
+
+1. Localiza el archivo llamado **`.env.example`** en la raíz del proyecto.
+2. Renómbralo a **`.env`** (elimina la extensión `.example`).
+3. Abre el nuevo archivo `.env` y sustituye los valores de prueba por las credenciales reales:
+
+```env
+# Configuración de Supabase (Requerido)
+# Sustituye estos valores por los proporcionados en la entrega del proyecto
+SUPABASE_URL=tu_url_de_supabase_aqui
+SUPABASE_ANON_KEY=tu_anon_key_aqui
+```
+
+> 📌 **Nota:** Las claves reales de acceso a la base de datos se adjuntan en la documentación oficial de la entrega del proyecto.
+
+> ⚠️ **Aviso de Seguridad:** El archivo `.env` está registrado en el `.gitignore` y **nunca debe subirse** al control de versiones. Esto protege la integridad de los datos y previene accesos no autorizados a la infraestructura de Supabase.
+
+### 5. Ejecución
+
+Una vez que el archivo `.env` esté configurado correctamente con las claves proporcionadas, compila y lanza la aplicación:
+
+```bash
+flutter run
+```
+
+---
+
 ## 📝 Notas de la Versión
 
 ### Leyenda
