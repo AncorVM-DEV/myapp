@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:myapp/main.dart' show supabase, MyApp;
+import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 import 'package:myapp/proyectos.dart';
 import 'package:myapp/tablaTarea.dart';
 import 'package:myapp/widgets/app_colores.dart';
@@ -195,8 +196,9 @@ class TareasState extends State<Tareas> {
     DateTime? fechaLimite,
     String prioridadSeleccionada,
   ) async {
-    String nombreT = nombreCont.text;
-    String descripcionT = descripcionCont.text;
+    // Sanitizamos el input antes de enviarlo a Supabase
+    String nombreT = Sanitizer.clean(nombreCont.text);
+    String descripcionT = Sanitizer.clean(descripcionCont.text);
 
     if (nombreT.isEmpty || descripcionT.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -511,19 +513,51 @@ class TareasState extends State<Tareas> {
                                     ),
                                     DropdownMenuItem(
                                       value: 'low',
-                                      child: Text('⚪  Baja'),
+                                      // Icono nativo reemplaza el emoji ⚪
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.flag_outlined, color: AppColores.textMuted, size: 14),
+                                          SizedBox(width: 6),
+                                          Text('Baja'),
+                                        ],
+                                      ),
                                     ),
                                     DropdownMenuItem(
                                       value: 'normal',
-                                      child: Text('🔵  Normal'),
+                                      // Icono nativo reemplaza el emoji 🔵
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.flag_rounded, color: Color(0xFF42A5F5), size: 14),
+                                          SizedBox(width: 6),
+                                          Text('Normal'),
+                                        ],
+                                      ),
                                     ),
                                     DropdownMenuItem(
                                       value: 'high',
-                                      child: Text('🟡  Alta'),
+                                      // Icono nativo reemplaza el emoji 🟡
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.flag_rounded, color: Color(0xFFFFC107), size: 14),
+                                          SizedBox(width: 6),
+                                          Text('Alta'),
+                                        ],
+                                      ),
                                     ),
                                     DropdownMenuItem(
                                       value: 'urgent',
-                                      child: Text('🔴  Urgente'),
+                                      // Icono nativo reemplaza el emoji 🔴
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.flag_rounded, color: Color(0xFFE53935), size: 14),
+                                          SizedBox(width: 6),
+                                          Text('Urgente'),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                   onChanged: (String? nuevaPrio) {
@@ -1321,12 +1355,8 @@ class TareasState extends State<Tareas> {
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.center,
                                                 children: [
-                                                  Text(
-                                                    emojiPrioridad(prioridad),
-                                                    style: const TextStyle(
-                                                      fontSize: 13,
-                                                    ),
-                                                  ),
+                                                  // Icono nativo en lugar de emoji para renderizado consistente
+                                                  iconoPrioridad(prioridad),
                                                   const SizedBox(width: 6),
                                                   Expanded(
                                                     child: Text(

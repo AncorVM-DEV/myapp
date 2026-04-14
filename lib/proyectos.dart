@@ -1,3 +1,4 @@
+import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 // ── PANTALLA: TUS PROYECTOS (INDIVIDUALES) ────────────────────────────────────
 // Muestra ÚNICAMENTE los proyectos donde el usuario actual es el ÚNICO miembro.
 // Los proyectos cooperativos (2+ miembros) se muestran en ProyectosCompartidos.
@@ -259,8 +260,9 @@ class _ProyectosState extends State<Proyectos> {
       final proyectoCreado = await supabase
           .from('projects')
           .insert({
-            'name': nombreP,
-            'description': descripcionP,
+            // Sanitizamos el input antes de enviarlo a Supabase
+            'name': Sanitizer.clean(nombreP),
+            'description': Sanitizer.clean(descripcionP),
             'created_by': userId,
             'estado': valorSeleccionado,
           })

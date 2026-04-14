@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:myapp/main.dart' show supabase;
+import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 import 'package:myapp/widgets/app_colores.dart';
 
 // ── SECCIÓN DE SUBTAREAS CONECTADA A SUPABASE ─────────────────────────────────
@@ -135,7 +136,8 @@ class _SeccionSubtareasState extends State<SeccionSubtareas> {
   // Inserta en Supabase y recarga la lista para ver el nuevo elemento
   // exactamente como lo devolvió la BD (con id, timestamps, etc.).
   Future<void> _guardarNuevaSubtarea() async {
-    final titulo = _nuevaSubtareaCont.text.trim();
+    // Sanitizamos el input antes de enviarlo a Supabase
+    final titulo = Sanitizer.clean(_nuevaSubtareaCont.text);
     if (titulo.isEmpty) return;
 
     setState(() => _guardando = true);

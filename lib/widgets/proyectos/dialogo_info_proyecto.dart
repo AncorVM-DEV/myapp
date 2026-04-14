@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:myapp/main.dart' show supabase;
+import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 import 'package:myapp/widgets/app_colores.dart';
 import 'package:myapp/widgets/proyectos/stat_chip.dart';
 import 'package:myapp/widgets/proyectos/dialogo_confirmacion_borrado.dart';
@@ -63,11 +64,12 @@ void mostrarDialogoInfoProyecto({
             setStateLocal(() => guardando = true);
 
             try {
+              // Sanitizamos el input antes de enviarlo a Supabase
               await supabase
                   .from('projects')
                   .update({
-                    'name': nuevoNombre,
-                    'description': nuevaDesc,
+                    'name': Sanitizer.clean(nuevoNombre),
+                    'description': Sanitizer.cleanNullable(nuevaDesc),
                     'estado': estadoEditable,
                   })
                   .eq('id', projectId);
@@ -586,7 +588,8 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
   // Busca en profiles por username === input. Si existe y no está
   // en el proyecto, lo añade a project_members con rol 'user'.
   Future<void> _invitarMiembro() async {
-    final username = _usernameCont.text.trim();
+    // Sanitizamos el username antes de consultar la base de datos
+    final username = Sanitizer.cleanUsername(_usernameCont.text);
     if (username.isEmpty) {
       widget.onMostrarSnackbar('Escribe un username para buscar', esError: true);
       return;

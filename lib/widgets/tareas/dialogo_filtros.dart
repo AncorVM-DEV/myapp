@@ -164,33 +164,37 @@ class _DialogoFiltrosState extends State<_DialogoFiltros> {
                     }),
                   ),
                   _chipFiltro(
-                    label: '🔴 Urgente',
+                    label: 'Urgente',
                     seleccionado: _filtros.prioridad == 'urgent',
                     color: AppColores.prioUrgente,
+                    icono: const Icon(Icons.flag_rounded, color: AppColores.prioUrgente, size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(prioridad: 'urgent');
                     }),
                   ),
                   _chipFiltro(
-                    label: '🟡 Alta',
+                    label: 'Alta',
                     seleccionado: _filtros.prioridad == 'high',
                     color: AppColores.prioAlta,
+                    icono: const Icon(Icons.flag_rounded, color: AppColores.prioAlta, size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(prioridad: 'high');
                     }),
                   ),
                   _chipFiltro(
-                    label: '🔵 Normal',
+                    label: 'Normal',
                     seleccionado: _filtros.prioridad == 'normal',
                     color: AppColores.prioNormal,
+                    icono: const Icon(Icons.flag_rounded, color: AppColores.prioNormal, size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(prioridad: 'normal');
                     }),
                   ),
                   _chipFiltro(
-                    label: '⚪ Baja',
+                    label: 'Baja',
                     seleccionado: _filtros.prioridad == 'low',
                     color: AppColores.prioBaja,
+                    icono: const Icon(Icons.flag_outlined, color: AppColores.prioBaja, size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(prioridad: 'low');
                     }),
@@ -223,33 +227,37 @@ class _DialogoFiltrosState extends State<_DialogoFiltros> {
                     }),
                   ),
                   _chipFiltro(
-                    label: '🔷 Por iniciar',
+                    label: 'Por iniciar',
                     seleccionado: _filtros.estado == 'Por iniciar',
                     color: Colors.blueGrey,
+                    icono: const Icon(Icons.work, color: Colors.blueGrey, size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(estado: 'Por iniciar');
                     }),
                   ),
                   _chipFiltro(
-                    label: '▶️ En curso',
+                    label: 'En curso',
                     seleccionado: _filtros.estado == 'En curso',
                     color: Colors.orange,
+                    icono: const Icon(Icons.keyboard_double_arrow_right_sharp, color: Colors.orange, size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(estado: 'En curso');
                     }),
                   ),
                   _chipFiltro(
-                    label: '⏸️ Pausado',
+                    label: 'Pausado',
                     seleccionado: _filtros.estado == 'Pausado',
                     color: Colors.red,
+                    icono: const Icon(Icons.pause_circle_outline, color: Colors.red, size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(estado: 'Pausado');
                     }),
                   ),
                   _chipFiltro(
-                    label: '✅ Finalizado',
+                    label: 'Finalizado',
                     seleccionado: _filtros.estado == 'Finalizado',
                     color: const Color(0xFF48D136),
+                    icono: const Icon(Icons.playlist_add_check_circle, color: Color(0xFF48D136), size: 14),
                     onTap: () => setState(() {
                       _filtros = _filtros.copyWith(estado: 'Finalizado');
                     }),
@@ -350,12 +358,20 @@ class _DialogoFiltrosState extends State<_DialogoFiltros> {
   // ── HELPER: chip de filtro seleccionable ──────────────────────────────────
   // Usamos MouseRegion para el cursor "manita" en web, y GestureDetector
   // con HitTestBehavior.opaque para garantizar los 48x48 px de toque en móvil.
+  // El parámetro [icono] es opcional; si se pasa, se muestra antes del texto.
   Widget _chipFiltro({
     required String label,
     required bool seleccionado,
     required Color color,
     required VoidCallback onTap,
+    Widget? icono,
   }) {
+    final estiloTexto = TextStyle(
+      color: seleccionado ? color : AppColores.textMuted,
+      fontSize: 12,
+      fontWeight: seleccionado ? FontWeight.w600 : FontWeight.normal,
+    );
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
@@ -373,14 +389,17 @@ class _DialogoFiltrosState extends State<_DialogoFiltros> {
               width: seleccionado ? 1.5 : 1,
             ),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: seleccionado ? color : AppColores.textMuted,
-              fontSize: 12,
-              fontWeight: seleccionado ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
+          // Si hay icono, mostramos icono + texto en fila; si no, solo texto
+          child: icono != null
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    icono,
+                    const SizedBox(width: 6),
+                    Text(label, style: estiloTexto),
+                  ],
+                )
+              : Text(label, style: estiloTexto),
         ),
       ),
     );

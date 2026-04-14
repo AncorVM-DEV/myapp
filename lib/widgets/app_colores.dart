@@ -139,6 +139,23 @@ String emojiPrioridad(String? prioridad) {
   }
 }
 
+// Devuelve un widget Icon nativo según la prioridad; sustituye a emojiPrioridad()
+// para un renderizado consistente en todas las plataformas (Android, web, Windows).
+Widget iconoPrioridad(String? prioridad, {double size = 14}) {
+  switch (prioridad) {
+    case 'urgent':
+      return Icon(Icons.flag_rounded, color: AppColores.prioUrgente, size: size);
+    case 'high':
+      return Icon(Icons.flag_rounded, color: AppColores.prioAlta, size: size);
+    case 'normal':
+      return Icon(Icons.flag_rounded, color: AppColores.prioNormal, size: size);
+    case 'low':
+      return Icon(Icons.flag_outlined, color: AppColores.prioBaja, size: size);
+    default:
+      return Icon(Icons.flag_outlined, color: AppColores.prioNinguna, size: size);
+  }
+}
+
 // Devuelve el texto legible para el humano
 String textoPrioridad(String? prioridad) {
   switch (prioridad) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:myapp/main.dart' show supabase;
+import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 import 'package:myapp/widgets/app_colores.dart';
 
 // ── SECCIÓN DE COMENTARIOS CONECTADA A SUPABASE ───────────────────────────────
@@ -31,7 +32,8 @@ class _SeccionComentariosState extends State<SeccionComentarios> {
 
   // Envía el comentario nuevo a Supabase
   Future<void> _enviarComentario() async {
-    final texto = _comentarioCont.text.trim();
+    // Sanitizamos el input antes de enviarlo a Supabase
+    final texto = Sanitizer.clean(_comentarioCont.text);
     if (texto.isEmpty) return;
 
     setState(() => _enviando = true);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:myapp/main.dart' show supabase;
+import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 import 'package:myapp/widgets/app_colores.dart';
 import 'package:myapp/widgets/tareas/seccion_clickup.dart';
 import 'package:myapp/widgets/tareas/dialogo_confirmacion_borrado_tarea.dart';
@@ -92,11 +93,12 @@ void mostrarDialogoInfoTarea({
               // En este punto fechaEditable y prioridadEditable tienen los
               // valores que el usuario eligió, NO los valores iniciales,
               // porque viven en el closure externo y sobreviven a los rebuilds.
+              // Sanitizamos el input antes de enviarlo a Supabase
               await supabase
                   .from('tasks')
                   .update({
-                    'title': nuevoNombre,
-                    'description': nuevaDesc,
+                    'title': Sanitizer.clean(nuevoNombre),
+                    'description': Sanitizer.cleanNullable(nuevaDesc),
                     'priority': prioridadEditable, // ← prioridad elegida
                     'due_date': fechaEditable
                         ?.toIso8601String(), // ← fecha elegida (null = borrar)
@@ -260,26 +262,56 @@ void mostrarDialogoInfoTarea({
                                 size: 20,
                               ),
                             ),
-                            items: const [
-                              DropdownMenuItem(
+                            // Reemplazamos emojis por Icon nativos para
+                            // renderizado consistente en todas las plataformas
+                            items: [
+                              const DropdownMenuItem(
                                 value: 'none',
                                 child: Text('— Sin prioridad'),
                               ),
                               DropdownMenuItem(
                                 value: 'low',
-                                child: Text('⚪  Baja'),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.flag_outlined, color: AppColores.prioBaja, size: 14),
+                                    SizedBox(width: 6),
+                                    Text('Baja'),
+                                  ],
+                                ),
                               ),
                               DropdownMenuItem(
                                 value: 'normal',
-                                child: Text('🔵  Normal'),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.flag_rounded, color: AppColores.prioNormal, size: 14),
+                                    SizedBox(width: 6),
+                                    Text('Normal'),
+                                  ],
+                                ),
                               ),
                               DropdownMenuItem(
                                 value: 'high',
-                                child: Text('🟡  Alta'),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.flag_rounded, color: AppColores.prioAlta, size: 14),
+                                    SizedBox(width: 6),
+                                    Text('Alta'),
+                                  ],
+                                ),
                               ),
                               DropdownMenuItem(
                                 value: 'urgent',
-                                child: Text('🔴  Urgente'),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.flag_rounded, color: AppColores.prioUrgente, size: 14),
+                                    SizedBox(width: 6),
+                                    Text('Urgente'),
+                                  ],
+                                ),
                               ),
                             ],
                             onChanged: (nuevaPrio) {

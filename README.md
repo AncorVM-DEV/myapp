@@ -9,6 +9,20 @@
 ---
 
 <details>
+<summary><strong>v13.04.2026 (Parte 2)</strong> 🛡️ Seguridad Avanzada y Refinamiento Visual (Click para ver detalles)</summary>
+<br>
+
+| 🛡️ Seguridad y Sanitización |
+| :--- |
+| <ul><li><b>Escudo anti-XSS e Inyecciones:</b> Se ha desarrollado e integrado un sistema de seguridad centralizado (<code>lib/utils/sanitizer.dart</code>) para proteger la base de datos contra scripts maliciosos y código basura.</li><li><b>Limpieza total de Inputs:</b> Absolutamente todos los textos introducidos por el usuario (títulos de proyectos, descripciones de tareas, subtareas, comentarios, nombres de perfil y búsquedas de usuarios) pasan ahora por un filtro estricto antes de realizar cualquier <code>INSERT</code> o <code>UPDATE</code> en Supabase, eliminando etiquetas HTML y colapsando espacios innecesarios.</li></ul> |
+
+| 🎨 Refactorización Visual y UI |
+| :--- |
+| <ul><li><b>Iconos Nativos (Material Design):</b> Se ha realizado una limpieza profunda de la interfaz, sustituyendo los emojis de texto estáticos (🔴, 🟡, ✅, ▶️, etc.) por widgets <code>Icon</code> nativos de Flutter.</li><li><b>Consistencia Multiplataforma:</b> Al abandonar los emojis del sistema operativo en favor de iconos nativos coloreados con la paleta oficial (<code>AppColores</code>), la aplicación garantiza ahora un aspecto 100% idéntico, coherente y profesional en Web, Windows, Android e iOS.</li></ul> |
+
+</details>
+
+<details>
 <summary><strong>v13.04.2026</strong> 🚀 Seguridad, Branding y Corrección Maestra de UI/UX (Click para ver detalles)</summary>
 <br>
 

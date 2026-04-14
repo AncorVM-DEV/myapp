@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:myapp/main.dart' show supabase;
+import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 import 'package:myapp/widgets/app_colores.dart';
 
 // ── [FASE 1A] PANTALLA DE PERFIL ─────────────────────────────────────────────
@@ -147,9 +148,11 @@ class _PerfilPageState extends State<PerfilPage> {
     // NOTA: Asegúrate de que tu tabla 'profiles' tenga la columna 'email' (TEXT, nullable).
     // SQL para añadirla si no existe: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email TEXT;
     try {
+      // Sanitizamos el input antes de enviarlo a Supabase
+      final emailLimpio = Sanitizer.cleanNullable(nuevoEmail);
       await supabase
           .from('profiles')
-          .update({'email': nuevoEmail.isEmpty ? null : nuevoEmail})
+          .update({'email': emailLimpio})
           .eq('id', userId);
       exitoProfiles = true;
     } on PostgrestException {
