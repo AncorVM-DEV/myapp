@@ -1,12 +1,12 @@
 // ── DRAWER COMPARTIDO DE LA APP ───────────────────────────────────────────────
-// Widget reutilizable que encapsula el menú lateral (Drawer) de ProTask.
-// Se usa tanto en "Tus proyectos" como en "Proyectos compartidos".
+// Drawer reutilizable.
 //
-// Para EVITAR IMPORTS CIRCULARES, la navegación se inyecta desde fuera mediante
-// callbacks (misProyectosBuilder y compartidosBuilder). El drawer no importa
-// ni conoce Proyectos ni ProyectosCompartidos; solo construye la UI del menú.
+// Importante con los imports: para no acabar con imports circulares, la navegación
+// se inyecta desde fuera con callbacks (misProyectosBuilder y
+// compartidosBuilder). Así el drawer no necesita importar Proyectos ni
+// ProyectosCompartidos, solo pinta el menú y ya.
 //
-// ── EJEMPLO DE USO ────────────────────────────────────────────────────────────
+// Ejemplo de cómo se usa:
 //   drawer: AppDrawer(
 //     nombreUsuario: widget.nombreUsuario,
 //     pantallaActual: PantallaProyectos.misProyectos,
@@ -95,7 +95,7 @@ class AppDrawer extends StatelessWidget {
           const SizedBox(height: 8),
 
           // ── MI PERFIL ─────────────────────────────────────────────────────
-          // [FASE 1B] El perfil es el primer ítem, siempre sin resaltar (no es
+          // El perfil es el primer ítem, siempre sin resaltar (no es
           // una pantalla de proyectos)
           _DrawerItem(
             icono: Icons.person_rounded,

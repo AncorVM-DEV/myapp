@@ -7,7 +7,7 @@ import 'package:myapp/widgets/tareas/dialogo_confirmacion_borrado_tarea.dart';
 // ── Secciones reales conectadas a Supabase ───────────────────────────────────
 import 'package:myapp/widgets/tareas/seccion_subtareas.dart';
 import 'package:myapp/widgets/tareas/seccion_comentarios.dart';
-// [FASE 1B] Importamos la nueva sección de adjuntos con subida de archivos
+// Importamos la nueva depedencja de adjuntos con subida de archivos
 import 'package:myapp/widgets/tareas/seccion_adjuntos.dart';
 
 // ── DIÁLOGO DE INFORMACIÓN DE UNA TAREA (con edición in-line) ────────────────
@@ -45,25 +45,22 @@ void mostrarDialogoInfoTarea({
       final descEditCont = TextEditingController(text: taskDescription);
 
       // ── VARIABLES DE ESTADO MUTABLES ─────────────────────────────────────
-      // ⚠️ CRÍTICO — Por qué estas variables están AQUÍ y no dentro del
-      // builder del StatefulBuilder:
+      // Ojo: estas variables tienen que ir aquí fuera, no dentro del StatefulBuilder.
+      // El builder se reejecuta cada vez que llamas a setStateLocal(), así que si las
+      // declaras dentro se resetean al valor inicial en cada rebuild.
       //
-      // El builder de StatefulBuilder se ejecuta de nuevo cada vez que se
-      // llama a setStateLocal(). Si las variables estuvieran dentro de ese
-      // builder, se recrearían con sus valores iniciales en cada rebuild.
-      // Ejemplo: el usuario elige prioridad 'urgent', setStateLocal()
-      // redibuja el diálogo → builder recrea `prioridadEditable = 'none'`
-      // → el dropdown vuelve a 'none' visualmente y guardarCambios() envía
-      // 'none' a la BD aunque el usuario eligió 'urgent'.
+      // Lo que pasa: el usuario elige 'urgent', setStateLocal() redibuja el diálogo,
+      // el builder vuelve a poner prioridadEditable = 'none' y el dropdown se ve en
+      // 'none' otra vez. Al darle a guardar se manda 'none' a la BD aunque el tío
+      // hubiera elegido 'urgent'.
       //
-      // Colocándolas aquí (dentro del builder del showDialog, fuera del
-      // builder del StatefulBuilder) se inicializan UNA SOLA VEZ cuando el
-      // diálogo se abre. setStateLocal() las muta y mantienen su valor
-      // entre rebuilds porque son variables del closure externo, no locales
-      // del closure interno.
+      // Dejándolas aquí (dentro del builder del showDialog pero fuera del del
+      // StatefulBuilder) se inicializan solo una vez al abrir el diálogo. Como viven
+      // en el closure externo, setStateLocal las muta y mantienen el valor entre
+      // rebuilds.
       DateTime? fechaEditable = fechaLimite;
       String prioridadEditable = prioridadActual ?? 'none';
-      // [FIX] Estado editable en el closure externo (misma razón que prioridadEditable):
+      // Estado editable en el closure externo (misma razón que prioridadEditable):
       // vive fuera del StatefulBuilder para no resetearse en cada setStateLocal().
       String statusEditable = taskEstado;
       bool guardando = false;
@@ -99,10 +96,10 @@ void mostrarDialogoInfoTarea({
                   .update({
                     'title': Sanitizer.clean(nuevoNombre),
                     'description': Sanitizer.cleanNullable(nuevaDesc),
-                    'priority': prioridadEditable, // ← prioridad elegida
+                    'priority': prioridadEditable, // prioridad elegida
                     'due_date': fechaEditable
-                        ?.toIso8601String(), // ← fecha elegida (null = borrar)
-                    // [FIX] Incluimos también el estado actual para que "Guardar cambios"
+                        ?.toIso8601String(), // fecha elegida (null = borrar)
+                    // Incluimos también el estado actual para que "Guardar cambios"
                     // persista cualquier estado que el usuario haya elegido en el dropdown.
                     'status': statusAEnum(statusEditable),
                   })
@@ -112,7 +109,7 @@ void mostrarDialogoInfoTarea({
               Navigator.pop(infoContext);
               onMostrarSnackbar('¡Cambios guardados!');
             } catch (e) {
-              print('Error en BD: $e'); // ← log de depuración
+              print('Error en BD: $e'); // log de depuración
               if (!context.mounted) return;
               setStateLocal(() => guardando = false);
               onMostrarSnackbar('Error al guardar: $e', esError: true);
@@ -274,7 +271,11 @@ void mostrarDialogoInfoTarea({
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: const [
-                                    Icon(Icons.flag_outlined, color: AppColores.prioBaja, size: 14),
+                                    Icon(
+                                      Icons.flag_outlined,
+                                      color: AppColores.prioBaja,
+                                      size: 14,
+                                    ),
                                     SizedBox(width: 6),
                                     Text('Baja'),
                                   ],
@@ -285,7 +286,11 @@ void mostrarDialogoInfoTarea({
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: const [
-                                    Icon(Icons.flag_rounded, color: AppColores.prioNormal, size: 14),
+                                    Icon(
+                                      Icons.flag_rounded,
+                                      color: AppColores.prioNormal,
+                                      size: 14,
+                                    ),
                                     SizedBox(width: 6),
                                     Text('Normal'),
                                   ],
@@ -296,7 +301,11 @@ void mostrarDialogoInfoTarea({
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: const [
-                                    Icon(Icons.flag_rounded, color: AppColores.prioAlta, size: 14),
+                                    Icon(
+                                      Icons.flag_rounded,
+                                      color: AppColores.prioAlta,
+                                      size: 14,
+                                    ),
                                     SizedBox(width: 6),
                                     Text('Alta'),
                                   ],
@@ -307,7 +316,11 @@ void mostrarDialogoInfoTarea({
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: const [
-                                    Icon(Icons.flag_rounded, color: AppColores.prioUrgente, size: 14),
+                                    Icon(
+                                      Icons.flag_rounded,
+                                      color: AppColores.prioUrgente,
+                                      size: 14,
+                                    ),
                                     SizedBox(width: 6),
                                     Text('Urgente'),
                                   ],
@@ -326,7 +339,7 @@ void mostrarDialogoInfoTarea({
                           ),
                           const SizedBox(height: 12),
 
-                          // [FIX] El bloque de estado de solo lectura se sustituye por un
+                          // El bloque de estado de solo lectura se sustituye por un
                           // DropdownButtonFormField editable que hace el UPDATE a Supabase
                           // de forma inmediata al cambiar, sin necesidad de "Guardar cambios".
                           _etiquetaCampo('ESTADO'),
@@ -521,9 +534,7 @@ void mostrarDialogoInfoTarea({
                           ),
                           const SizedBox(height: 16),
 
-                          // ══════════════════════════════════════════════════
                           // ── SECCIÓN SUBTAREAS (conectada a Supabase) ──────
-                          // ══════════════════════════════════════════════════
                           SeccionClickUp(
                             icono: Icons.checklist_rounded,
                             titulo: 'SUBTAREAS',
@@ -531,20 +542,15 @@ void mostrarDialogoInfoTarea({
                           ),
                           const SizedBox(height: 12),
 
-                          // ══════════════════════════════════════════════════
                           // ── SECCIÓN COMENTARIOS (conectada a Supabase) ────
-                          // ══════════════════════════════════════════════════
                           SeccionClickUp(
                             icono: Icons.chat_bubble_outline_rounded,
                             titulo: 'COMENTARIOS',
                             hijo: SeccionComentarios(taskId: taskId),
                           ),
                           const SizedBox(height: 12),
-
-                          // ══════════════════════════════════════════════════
                           // ── SECCIÓN ARCHIVOS ADJUNTOS (conectada a Supabase) ─
-                          // ══════════════════════════════════════════════════
-                          // [FASE 1B] Sustituimos la maqueta "Próximamente" por
+                          // Sustituimos la maqueta "Próximamente" por
                           // SeccionAdjuntos, que permite subir cualquier tipo de
                           // archivo al bucket 'archivos_tareas' de Supabase Storage
                           // y visualizarlos directamente en el diálogo.

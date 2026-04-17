@@ -94,9 +94,9 @@ class _MyHomePageState extends State<MyHomePage> {
         // pero si el usuario actualizó su correo real desde la pantalla de Perfil,
         // Supabase Auth migró su cuenta a ese email real y ya no reconoce "@tfg.com".
         //
-        // Solución definitiva: consultamos profiles ANTES de autenticar para saber
+        // Consultamos profiles ANTES de autenticar para saber
         // qué email tiene registrado ese username. Si tiene email real → lo usamos.
-        // Si no tiene (cuenta antigua que nunca actualizó el correo) → usamos el hack.
+        // Si no tiene (cuenta antigua que nunca actualizó el correo)
         // Así ambos tipos de cuenta funcionan siempre, sin importar su historial.
         final perfilPrevio = await supabase
             .from('profiles')
@@ -111,8 +111,7 @@ class _MyHomePageState extends State<MyHomePage> {
             (emailGuardado != null && emailGuardado.isNotEmpty)
             ? emailGuardado
             : '$userSanitizado@tfg.com';
-
-        // Aquí está el "hack" del login: el usuario escribe "juanito" pero nosotros
+        // Aqui el usario pone Juanito
         // le mandamos "juanito@tfg.com" a Supabase, que necesita un email válido.
         // Cambiamos FirebaseAuth.instance.signInWithEmailAndPassword por el equivalente de Supabase.
         final response = await supabase.auth.signInWithPassword(
@@ -172,13 +171,13 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // ── [FASE 1A] RECUPERACIÓN DE CONTRASEÑA ─────────────────────────────────
+  // ── RECUPERACIÓN DE CONTRASEÑA ─────────────────────────────────
   // Abre un diálogo donde el usuario introduce su correo electrónico REAL
   // (el que guardó en su perfil, no el "usuario@tfg.com" del hack).
   // Supabase envía un magic link a ese email para restablecer la contraseña.
-  // IMPORTANTE: esto solo funciona si el usuario guardó su email real al registrarse
+  // Esto solo funciona si el usuario guardó su email real al registrarse
   // o lo añadió después desde la pantalla de Perfil.
-  // [FIX] El diálogo de recuperación se abre usando un StatefulWidget dedicado
+  //  El diálogo de recuperación se abre usando un StatefulWidget dedicado
   // (_DialogoRecuperacion) en lugar de gestionar el TextEditingController aquí.
   // Esto elimina los crashes "used after being disposed" y el overflow del teclado:
   // el widget tiene su propio initState/dispose y envuelve el contenido en
@@ -307,7 +306,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                   validar(), //Llama a validar al pulsar enter
                             ),
 
-                            // ── [FASE 1A] ENLACE DE CONTRASEÑA OLVIDADA ──────────────
+                            // ── ENLACE DE CONTRASEÑA OLVIDADA ──────────────
                             // TextButton alineado a la derecha para que no rompa el flujo
                             // visual del formulario. Abre el diálogo de recuperación.
                             Align(
@@ -418,17 +417,8 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-// ── [FIX] DIÁLOGO DE RECUPERACIÓN EXTRAÍDO A WIDGET PROPIO ───────────────────
-// Antes el AlertDialog vivía dentro de showDialog con un TextEditingController
-// creado en el closure. Eso causaba tres problemas en Android:
-//   1. "used after being disposed": el controller se llamaba a .dispose() a mano
-//      en dos callbacks async distintos → race condition.
-//   2. "_dependents.isEmpty is not true": se intentaba navegar mientras el árbol
-//      aún se estaba construyendo (StatefulBuilder + contextos cruzados).
-//   3. RenderFlex overflow de 99835 px: al salir el teclado, la Column sin
-//      scroll explotaba porque AlertDialog no sabe cuánto espacio queda.
-//
-// Solución: este StatefulWidget tiene su propio ciclo de vida completo.
+// ──  DIÁLOGO DE RECUPERACIÓN EXTRAÍDO A WIDGET PROPIO ───────────────────
+// Este StatefulWidget tiene su propio ciclo de vida completo.
 // El controller se crea en initState y se libera en dispose, que Flutter
 // llama automáticamente cuando el diálogo se cierra. Sin llamadas manuales
 // a .dispose() dentro de callbacks = sin race conditions.
@@ -516,7 +506,7 @@ class _DialogoRecuperacionState extends State<_DialogoRecuperacion> {
           ),
         ],
       ),
-      // [FIX] SingleChildScrollView: cuando el teclado de Android aparece
+      // SingleChildScrollView: cuando el teclado de Android aparece
       // y reduce el espacio disponible, el contenido hace scroll en lugar
       // de desbordarse. mainAxisSize.min evita que la Column intente
       // ocupar altura infinita dentro del diálogo.

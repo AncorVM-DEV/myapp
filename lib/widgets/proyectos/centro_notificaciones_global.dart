@@ -57,8 +57,11 @@ void mostrarCentroNotificacionesGlobal({
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                     child: Row(
                       children: [
-                        const Icon(Icons.notifications_rounded,
-                            color: AppColores.orangePrimary, size: 26),
+                        const Icon(
+                          Icons.notifications_rounded,
+                          color: AppColores.orangePrimary,
+                          size: 26,
+                        ),
                         const SizedBox(width: 10),
                         const Expanded(
                           child: Text(
@@ -71,8 +74,11 @@ void mostrarCentroNotificacionesGlobal({
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close,
-                              color: AppColores.textMuted, size: 20),
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppColores.textMuted,
+                            size: 20,
+                          ),
                           onPressed: () => Navigator.pop(notifCtx),
                         ),
                       ],
@@ -85,7 +91,9 @@ void mostrarCentroNotificacionesGlobal({
                   // extraños. Al pulsar uno actualiza el estado inmediatamente.
                   Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 8),
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -98,8 +106,11 @@ void mostrarCentroNotificacionesGlobal({
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.tune_rounded,
-                                  color: AppColores.orangePrimary, size: 18),
+                              const Icon(
+                                Icons.tune_rounded,
+                                color: AppColores.orangePrimary,
+                                size: 18,
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 'Avisar con $diasTemp día(s) de antelación',
@@ -157,7 +168,7 @@ void mostrarCentroNotificacionesGlobal({
                   // --- MIGRACIÓN A SUPABASE ---
                   // Cambiamos el StreamBuilder de Firestore (QuerySnapshot) por uno de Supabase.
                   // Escuchamos en tiempo real las tareas creadas por el usuario actual.
-                  // ⚠️ Para que el stream funcione, asegúrate de habilitar Realtime
+                  //  Para que el stream funcione, asegúrate de habilitar Realtime
                   // en la tabla 'tasks' desde tu panel de Supabase → Database → Replication.
                   Flexible(
                     child: StreamBuilder<List<Map<String, dynamic>>>(
@@ -170,33 +181,38 @@ void mostrarCentroNotificacionesGlobal({
                             ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(
-                                color: AppColores.orangePrimary),
+                              color: AppColores.orangePrimary,
+                            ),
                           );
                         }
 
-                        if (!snapshot.hasData ||
-                            snapshot.data!.isEmpty) {
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
                           return _buildEstadoVacioNotif(
-                              'No tienes tareas en ningún proyecto.');
+                            'No tienes tareas en ningún proyecto.',
+                          );
                         }
 
                         // Filtramos las tareas que deben aparecer en el panel:
                         // 1) Que tengan fecha límite dentro del rango
                         // 2) Que NO estén finalizadas (en el nuevo esquema status == 'done')
                         // 3) Que el usuario no las haya descartado en esta sesión
-                        final tareasEnAlerta =
-                            snapshot.data!.where((data) {
+                        final tareasEnAlerta = snapshot.data!.where((data) {
                           // En el nuevo esquema 'done' equivale al antiguo iscompleted == true
                           if (data['status'] == 'done') return false;
 
                           // Si el usuario la marcó como leída en esta sesión la ocultamos
-                          if (notificacionesLeidas.contains(data['id'] as String)) return false;
+                          if (notificacionesLeidas.contains(
+                            data['id'] as String,
+                          ))
+                            return false;
 
                           if (data['due_date'] == null) return false;
 
                           // Supabase devuelve las fechas como String ISO 8601,
                           // así que las parseamos a DateTime para poder compararlas.
-                          final fecha = DateTime.parse(data['due_date'] as String);
+                          final fecha = DateTime.parse(
+                            data['due_date'] as String,
+                          );
                           return fecha.isBefore(limiteAlerta) ||
                               fecha.isAtSameMomentAs(limiteAlerta);
                         }).toList();
@@ -213,7 +229,9 @@ void mostrarCentroNotificacionesGlobal({
                           itemBuilder: (context, index) {
                             final data = tareasEnAlerta[index];
                             // Supabase devuelve la fecha como String, la parseamos
-                            final fecha = DateTime.parse(data['due_date'] as String);
+                            final fecha = DateTime.parse(
+                              data['due_date'] as String,
+                            );
                             final color = colorFechaLimite(fecha, diasTemp);
                             final dias = diasRestantes(fecha);
 
@@ -224,10 +242,10 @@ void mostrarCentroNotificacionesGlobal({
                             // Si no está cacheado todavía mostramos el ID abreviado como fallback.
                             final projectId = data['project_id'] as String?;
                             final nombreProyecto = projectId != null
-                                ? (proyectosCache[projectId] ?? 'Proyecto ${projectId.substring(0, 8)}...')
+                                ? (proyectosCache[projectId] ??
+                                      'Proyecto ${projectId.substring(0, 8)}...')
                                 : 'Sin proyecto';
 
-                            // ── Texto con el formato exacto solicitado ──
                             // "Quedan X días para que la tarea: '[nombre]'
                             // del proyecto: '[proyecto]' llegue a su fecha límite."
                             // Casos especiales: ya venció, vence hoy, vence mañana.
@@ -244,19 +262,20 @@ void mostrarCentroNotificacionesGlobal({
                             }
 
                             return Container(
-                              margin:
-                                  const EdgeInsets.symmetric(vertical: 4),
+                              margin: const EdgeInsets.symmetric(vertical: 4),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF23253A),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                    color: color.withOpacity(0.5)),
+                                  color: color.withOpacity(0.5),
+                                ),
                               ),
                               child: Row(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Barra de color de urgencia a la izquierda
                                   Container(
@@ -264,8 +283,7 @@ void mostrarCentroNotificacionesGlobal({
                                     height: 44,
                                     decoration: BoxDecoration(
                                       color: color,
-                                      borderRadius:
-                                          BorderRadius.circular(4),
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
                                   ),
                                   const SizedBox(width: 10),
@@ -281,8 +299,11 @@ void mostrarCentroNotificacionesGlobal({
                                     ),
                                   ),
                                   const SizedBox(width: 6),
-                                  Icon(Icons.alarm_rounded,
-                                      color: color, size: 20),
+                                  Icon(
+                                    Icons.alarm_rounded,
+                                    color: color,
+                                    size: 20,
+                                  ),
 
                                   // ── Botón "Marcar como leída" ───────────
                                   // Al pulsar la X, el ID del documento se añade
@@ -295,7 +316,9 @@ void mostrarCentroNotificacionesGlobal({
                                       // El ID ahora viene en data['id'] como String UUID,
                                       // no como doc.id de Firestore.
                                       setStateNotif(() {
-                                        notificacionesLeidas.add(data['id'] as String);
+                                        notificacionesLeidas.add(
+                                          data['id'] as String,
+                                        );
                                       });
                                       // También reconstruimos el badge del AppBar
                                       onActualizarEstado();
@@ -335,8 +358,11 @@ Widget _buildEstadoVacioNotif(String mensaje) {
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.notifications_off_rounded,
-            color: AppColores.borderColor, size: 48),
+        const Icon(
+          Icons.notifications_off_rounded,
+          color: AppColores.borderColor,
+          size: 48,
+        ),
         const SizedBox(height: 12),
         Text(
           mensaje,

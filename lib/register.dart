@@ -16,7 +16,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  // [FASE 1A] Controlador para el nuevo campo de correo electrónico opcional.
+  // Controlador para el nuevo campo de correo electrónico opcional.
   // Es opcional para no romper el flujo actual: si el usuario no lo rellena,
   // el registro sigue funcionando exactamente igual que antes.
   final _emailController = TextEditingController();
@@ -27,7 +27,8 @@ class _RegisterPageState extends State<RegisterPage> {
     _userController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _emailController.dispose(); // [FASE 1A] Liberamos también el nuevo controlador
+    _emailController
+        .dispose(); // [FASE 1A] Liberamos también el nuevo controlador
     super.dispose();
   }
 
@@ -69,7 +70,7 @@ class _RegisterPageState extends State<RegisterPage> {
     return trimmed;
   }
 
-  // ── [FASE 1A] FUNCIÓN DE VALIDACIÓN DE EMAIL (OPCIONAL) ──────────────────
+  // ──FUNCIÓN DE VALIDACIÓN DE EMAIL (OPCIONAL) ──────────────────
   // Comprueba que el email tiene una estructura básica válida.
   // Como el campo es opcional, si está vacío devolvemos null (sin error).
   // Si el usuario escribe algo, sí lo validamos para evitar guardar basura.
@@ -119,13 +120,14 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    // ── [FASE 1A] Validamos el email si el usuario lo rellenó ────────────────
+    // ── Validamos el email si el usuario lo rellenó ────────────────
     final emailResultado = _validarEmail(_emailController.text);
     if (emailResultado == 'INVALIDO') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'El correo electrónico no parece válido. Revísalo o déjalo en blanco.'),
+            'El correo electrónico no parece válido. Revísalo o déjalo en blanco.',
+          ),
         ),
       );
       return;
@@ -152,7 +154,7 @@ class _RegisterPageState extends State<RegisterPage> {
         return; // Detenemos la función si hay campos vacíos.
       } else {
         try {
-          // ── [FASE 1B] VERIFICACIÓN DE EMAIL DUPLICADO ─────────────────────
+          // ── VERIFICACIÓN DE EMAIL DUPLICADO ─────────────────────
           // Antes de intentar el signUp, consultamos la tabla 'profiles' para
           // comprobar si el email real ya está en uso por otra cuenta.
           // Esto es necesario porque la columna 'email' tiene restricción UNIQUE,
@@ -187,7 +189,8 @@ class _RegisterPageState extends State<RegisterPage> {
           // pero nosotros registramos "juanito@tfg.com" porque Supabase necesita un email.
           // Cambiamos createUserWithEmailAndPassword por el equivalente de Supabase.
           final response = await supabase.auth.signUp(
-            email: '$user@tfg.com', // Añadimos el dominio ficticio igual que antes
+            email:
+                '$user@tfg.com', // Añadimos el dominio ficticio igual que antes
             password: password,
           );
 
@@ -196,16 +199,15 @@ class _RegisterPageState extends State<RegisterPage> {
           // Usamos el UUID que Supabase Auth acaba de generar para el nuevo usuario.
           // Si el nombre de usuario ya existe, la restricción UNIQUE de la tabla lo bloqueará.
 
-          // [FASE 1A] Construimos el mapa de datos del perfil.
+          // Construimos el mapa de datos del perfil.
           // Si el usuario proporcionó un email real, lo incluimos en la inserción.
           // Si no, guardamos solo los campos básicos de siempre.
-          // NOTA: Asegúrate de que tu tabla 'profiles' tenga la columna 'email' (TEXT, nullable).
-          // SQL para añadirla si no existe:
-          //   ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email TEXT;
+
           final Map<String, dynamic> datosPerfil = {
             'id': response.user!.id, // El UUID que nos dio Supabase Auth
             'username': user, // El nombre que escribió el usuario en el campo
-            'full_name': user, // De momento lo rellenamos igual; se puede editar después
+            'full_name':
+                user, // De momento lo rellenamos igual; se puede editar después
             if (emailValido != null) 'email': emailValido, // Solo si lo rellenó
           };
 
@@ -217,7 +219,9 @@ class _RegisterPageState extends State<RegisterPage> {
           // Lo hacemos en un try separado para que, si falla, no revierta el registro.
           if (emailValido != null) {
             try {
-              await supabase.auth.updateUser(UserAttributes(email: emailValido));
+              await supabase.auth.updateUser(
+                UserAttributes(email: emailValido),
+              );
             } catch (_) {
               // Si falla la actualización del email en auth, no es crítico.
               // El perfil ya se guardó correctamente. El usuario puede actualizar
@@ -247,9 +251,9 @@ class _RegisterPageState extends State<RegisterPage> {
           } else {
             message = 'Ha ocurrido un error durante el registro: ${e.message}';
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         } on PostgrestException catch (e) {
           // Este error lo lanza Supabase cuando falla algo en la base de datos,
           // por ejemplo si el username ya existe (restricción UNIQUE en la tabla profiles).
@@ -263,9 +267,9 @@ class _RegisterPageState extends State<RegisterPage> {
           // Como el perfil no se guardó, borramos también el usuario de Auth
           // para no dejar una cuenta huérfana sin perfil asociado
           await supabase.auth.signOut();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         } catch (e) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Ha ocurrido un error inesperado')),
@@ -415,7 +419,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               onSubmitted: (_) => validar(),
                             ),
 
-                            // ── [FASE 1A] CAMPO DE EMAIL OPCIONAL ────────────────────
+                            // ── CAMPO DE EMAIL OPCIONAL ────────────────────
                             // Este campo es completamente opcional: si el usuario lo deja
                             // en blanco, el registro funciona igual que siempre.
                             // Si lo rellena, guardamos el email real en 'profiles' para que
@@ -469,7 +473,9 @@ class _RegisterPageState extends State<RegisterPage> {
                               onSubmitted: (_) => validar(),
                             ),
 
-                            const SizedBox(height: 28.0), // Espacio antes del botón
+                            const SizedBox(
+                              height: 28.0,
+                            ), // Espacio antes del botón
                             // Botón de registro
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(

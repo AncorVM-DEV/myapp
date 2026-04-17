@@ -4,16 +4,12 @@ import 'package:myapp/main.dart' show supabase;
 import 'package:myapp/login.dart';
 import 'package:myapp/widgets/app_colores.dart';
 
-// ── [FASE 1B] PANTALLA DE ACTUALIZACIÓN DE CONTRASEÑA ────────────────────────
+// ── PANTALLA DE ACTUALIZACIÓN DE CONTRASEÑA ────────────────────────
 // Esta pantalla aparece ÚNICAMENTE cuando Supabase detecta un evento
 // AuthChangeEvent.passwordRecovery, es decir, cuando el usuario llegó
 // a la app a través del enlace de recuperación de contraseña que envió
 // su correo. Supabase ya lo ha logueado automáticamente con una sesión
 // temporal; solo necesitamos que escriba su nueva contraseña y la confirmemos.
-//
-// ¿Por qué una pantalla dedicada y no un diálogo?
-// Porque el magic link puede abrir la app desde un estado frío (cold start),
-// y un diálogo requiere una pantalla de fondo. Así es más robusto y claro.
 class ActualizarPasswordPage extends StatefulWidget {
   const ActualizarPasswordPage({super.key});
 
@@ -79,12 +75,10 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
     setState(() => _guardando = true);
 
     try {
-      // Esta es la llamada clave: actualizamos la contraseña en Supabase Auth.
+      // Esta es la llamada: actualizamos la contraseña en Supabase Auth.
       // La sesión temporal del magic link ya está activa, así que Supabase sabe
       // a qué usuario pertenece la actualización sin que tengamos que indicárselo.
-      await supabase.auth.updateUser(
-        UserAttributes(password: nuevaPass),
-      );
+      await supabase.auth.updateUser(UserAttributes(password: nuevaPass));
 
       // Contraseña actualizada con éxito. Cerramos la sesión temporal del magic link.
       // El usuario deberá loguearse de nuevo con su usuario y la contraseña nueva.
@@ -105,8 +99,7 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
         Navigator.pushAndRemoveUntil(
           context,
           PageRouteBuilder(
-            pageBuilder: (_, __, ___) =>
-                const MyHomePage(title: 'ProTask'),
+            pageBuilder: (_, __, ___) => const MyHomePage(title: 'ProTask'),
             transitionsBuilder: (_, anim, __, child) =>
                 FadeTransition(opacity: anim, child: child),
             transitionDuration: const Duration(milliseconds: 400),
@@ -122,19 +115,22 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
         mensaje =
             'El enlace de recuperación ha expirado. Solicita uno nuevo desde el login.';
       } else if (e.message.contains('weak') || e.message.contains('password')) {
-        mensaje = 'La contraseña es demasiado débil. Prueba con una más segura.';
+        mensaje =
+            'La contraseña es demasiado débil. Prueba con una más segura.';
       } else {
         mensaje = 'No se pudo actualizar la contraseña. Inténtalo de nuevo.';
       }
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(mensaje)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
     } catch (_) {
       // Error genérico (sin red, timeout...)
       setState(() => _guardando = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content:
-              Text('Error de conexión. Comprueba tu red e inténtalo de nuevo.'),
+          content: Text(
+            'Error de conexión. Comprueba tu red e inténtalo de nuevo.',
+          ),
         ),
       );
     }
@@ -231,11 +227,7 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // ── LOGO ─────────────────────────────────────────────
-                      Image.asset(
-                        'media/proyecto.png',
-                        height: 90,
-                        width: 90,
-                      ),
+                      Image.asset('media/proyecto.png', height: 90, width: 90),
                       const SizedBox(height: 16),
 
                       // ── NOMBRE DE LA APP ──────────────────────────────────
@@ -321,8 +313,7 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
                                 style: const TextStyle(color: Colors.white),
                                 decoration: InputDecoration(
                                   labelText: 'Nueva contraseña',
-                                  prefixIcon:
-                                      const Icon(Icons.lock_outline),
+                                  prefixIcon: const Icon(Icons.lock_outline),
                                   // Botón para mostrar/ocultar la contraseña
                                   suffixIcon: IconButton(
                                     icon: Icon(
@@ -354,8 +345,7 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
                                 style: const TextStyle(color: Colors.white),
                                 decoration: InputDecoration(
                                   labelText: 'Confirmar contraseña',
-                                  prefixIcon:
-                                      const Icon(Icons.lock_outline),
+                                  prefixIcon: const Icon(Icons.lock_outline),
                                   suffixIcon: IconButton(
                                     icon: Icon(
                                       _verConfirmarPass
@@ -410,8 +400,9 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
                                     letterSpacing: 1.0,
                                   ),
                                 ),
-                                onPressed:
-                                    _guardando ? null : _guardarNuevaContrasena,
+                                onPressed: _guardando
+                                    ? null
+                                    : _guardarNuevaContrasena,
                               ),
                             ],
                           ),
@@ -421,8 +412,7 @@ class _ActualizarPasswordPageState extends State<ActualizarPasswordPage> {
                       // ── NOTA DE SEGURIDAD ─────────────────────────────────
                       const SizedBox(height: 20),
                       Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8.0),
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

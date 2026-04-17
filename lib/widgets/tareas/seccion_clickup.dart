@@ -43,8 +43,7 @@ class SeccionClickUp extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // ── MAGIA AQUÍ ──
-              // Solo pintamos el contenedor del badge si no es nulo y tiene texto
+              // Solo pintamos el badge si viene con texto, si no ni lo renderizamos
               if (badge != null && badge!.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(

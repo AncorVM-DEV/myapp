@@ -1,13 +1,5 @@
 import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 // ── PANTALLA: TUS PROYECTOS (INDIVIDUALES) ────────────────────────────────────
-// Muestra ÚNICAMENTE los proyectos donde el usuario actual es el ÚNICO miembro.
-// Los proyectos cooperativos (2+ miembros) se muestran en ProyectosCompartidos.
-//
-// Lógica de consulta (Fase 2 - Objetivo 2):
-//   1. Escuchamos en tiempo real la tabla project_members filtrada por userId.
-//   2. Cuando llegan cambios, ejecutamos _cargarProyectosSolo() de forma asíncrona.
-//   3. Esa función cuenta los miembros de cada proyecto y filtra los que tienen 1.
-//   4. El resultado se guarda en _proyectos y setState() actualiza la UI.
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -67,7 +59,7 @@ class _ProyectosState extends State<Proyectos> {
   // de filas nuevas, algo que .stream() no hace correctamente.
   RealtimeChannel? _canalMemberships;
 
-  // [FIX] Canal secundario que escucha INSERT y UPDATE directamente en la tabla
+  //  Canal secundario que escucha INSERT y UPDATE directamente en la tabla
   // 'projects'. Sin él, editar el nombre, descripción o estado de un proyecto
   // no se reflejaba en la lista porque _canalMemberships solo escucha
   // cambios en 'project_members', no en 'projects'.
@@ -95,7 +87,7 @@ class _ProyectosState extends State<Proyectos> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'project_members',
-          // [FIX] Se elimina el filtro server-side: los filtered channels requieren
+          // Se elimina el filtro server-side: los filtered channels requieren
           // Realtime RLS activado; sin esa configuración el callback nunca dispara.
           // Ahora filtramos en el cliente dentro del callback, igual que hace
           // proyectos_compartidos.dart, para no disparar recargas innecesarias.
@@ -109,7 +101,7 @@ class _ProyectosState extends State<Proyectos> {
         )
         .subscribe();
 
-    // [FIX] Canal adicional para la tabla 'projects': detecta CREATE (INSERT) y
+    // Canal adicional para la tabla 'projects': detecta CREATE (INSERT) y
     // EDIT/CAMBIO DE ESTADO (UPDATE). Sin filtro server-side por el mismo motivo
     // que _canalMemberships. _cargarProyectosSolo filtra por membresía del usuario.
     _canalProyectos = supabase
@@ -214,7 +206,7 @@ class _ProyectosState extends State<Proyectos> {
   void dispose() {
     // Eliminamos el canal de Supabase al salir para liberar recursos
     if (_canalMemberships != null) supabase.removeChannel(_canalMemberships!);
-    // [FIX] Liberamos también el canal secundario de la tabla 'projects'
+    //  Liberamos también el canal secundario de la tabla 'projects'
     if (_canalProyectos != null) supabase.removeChannel(_canalProyectos!);
     nombreCont.dispose();
     descripcionCont.dispose();
@@ -287,7 +279,7 @@ class _ProyectosState extends State<Proyectos> {
         const SnackBar(content: Text('¡Proyecto creado con éxito!')),
       );
 
-      // [FIX] Forzamos recarga inmediata de la lista sin esperar al canal Realtime,
+      // Forzamos recarga inmediata de la lista sin esperar al canal Realtime,
       // garantizando que el nuevo proyecto aparezca al instante en cualquier entorno.
       _cargarProyectosSolo(userId);
 
@@ -312,7 +304,7 @@ class _ProyectosState extends State<Proyectos> {
   Future<void> eliminarProyecto(String projectName, String projectId) async {
     await supabase.from('projects').delete().eq('id', projectId);
 
-    // BUG 2 CORREGIDO: antes solo se hacía el .delete() en Supabase pero la UI
+    // Antes solo se hacía el .delete() en Supabase pero la UI
     // no reaccionaba hasta el próximo reload del canal en tiempo real.
     // Ahora removemos el proyecto de la lista local inmediatamente con setState,
     // así la tarjeta desaparece al instante sin esperar al siguiente evento.

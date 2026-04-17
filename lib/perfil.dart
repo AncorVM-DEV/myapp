@@ -4,27 +4,10 @@ import 'package:myapp/main.dart' show supabase;
 import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de enviar a Supabase
 import 'package:myapp/widgets/app_colores.dart';
 
-// ── [FASE 1A] PANTALLA DE PERFIL ─────────────────────────────────────────────
-// Pantalla nueva que permite al usuario ver y actualizar su información personal.
+// ──  PANTALLA DE PERFIL ─────────────────────────────────────────────
+// Pantalla que permite al usuario ver y actualizar su información personal.
 // De momento expone dos campos: el username (solo lectura, para que sepa quién es)
 // y el correo electrónico real (editable, útil para recuperar contraseña).
-//
-// Acceso desde el Drawer de proyectos.dart añadiendo este ListTile justo debajo
-// del de "Compartido contigo":
-//
-//   ListTile(
-//     leading: const Icon(Icons.person_rounded, color: AppColores.orangePrimary),
-//     title: const Text('Mi perfil', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
-//     onTap: () {
-//       Navigator.pop(context); // Cerramos el drawer antes de navegar
-//       Navigator.push(context, MaterialPageRoute(
-//         builder: (_) => PerfilPage(nombreUsuario: widget.nombreUsuario),
-//       ));
-//     },
-//   ),
-//
-// Recuerda añadir también el import al principio de proyectos.dart:
-//   import 'package:myapp/perfil.dart';
 class PerfilPage extends StatefulWidget {
   // Recibimos el nombre de usuario desde Proyectos para mostrarlo de entrada
   // sin necesidad de hacer una consulta extra a la BD nada más abrir la pantalla
@@ -68,11 +51,14 @@ class _PerfilPageState extends State<PerfilPage> {
   Future<void> _cargarPerfil() async {
     try {
       final userId = supabase.auth.currentUser?.id;
-      if (userId == null) return; // No debería ocurrir si el usuario está logueado
+      if (userId == null)
+        return; // No debería ocurrir si el usuario está logueado
 
       final datos = await supabase
           .from('profiles')
-          .select('email') // Solo necesitamos el email; el username ya lo tenemos
+          .select(
+            'email',
+          ) // Solo necesitamos el email; el username ya lo tenemos
           .eq('id', userId)
           .maybeSingle();
 
@@ -113,9 +99,7 @@ class _PerfilPageState extends State<PerfilPage> {
     // Si no ha cambiado nada, no hacemos ninguna llamada innecesaria
     if (nuevoEmail == _emailOriginal) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No has realizado ningún cambio.'),
-        ),
+        const SnackBar(content: Text('No has realizado ningún cambio.')),
       );
       return;
     }
@@ -125,7 +109,8 @@ class _PerfilPageState extends State<PerfilPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'El correo electrónico no tiene un formato válido. Revísalo.'),
+            'El correo electrónico no tiene un formato válido. Revísalo.',
+          ),
         ),
       );
       return;
@@ -143,10 +128,9 @@ class _PerfilPageState extends State<PerfilPage> {
     bool exitoProfiles = false;
     bool exitoAuth = false;
 
-    // ── Paso 1: Actualizamos la tabla 'profiles' ──────────────────────────
+    // ──  Actualizamos la tabla 'profiles' ──────────────────────────
     // Aquí guardamos el email en nuestra propia tabla de datos de usuario.
-    // NOTA: Asegúrate de que tu tabla 'profiles' tenga la columna 'email' (TEXT, nullable).
-    // SQL para añadirla si no existe: ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email TEXT;
+
     try {
       // Sanitizamos el input antes de enviarlo a Supabase
       final emailLimpio = Sanitizer.cleanNullable(nuevoEmail);
@@ -160,7 +144,8 @@ class _PerfilPageState extends State<PerfilPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'No se pudo actualizar el perfil. Contacta con el administrador.'),
+            'No se pudo actualizar el perfil. Contacta con el administrador.',
+          ),
         ),
       );
     } catch (_) {
@@ -171,7 +156,7 @@ class _PerfilPageState extends State<PerfilPage> {
       );
     }
 
-    // ── Paso 2: Actualizamos el email en Supabase Auth ────────────────────
+    // ── Actualizamos el email en Supabase Auth ────────────────────
     // Esto es necesario para que las funciones de Auth (como el envío de email
     // de recuperación de contraseña) encuentren la dirección actualizada.
     // Solo lo hacemos si el nuevo email no está vacío (no tiene sentido poner
@@ -187,7 +172,8 @@ class _PerfilPageState extends State<PerfilPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                  '⚠️ Ese correo ya está en uso por otra cuenta. Se guardó en tu perfil, pero no se actualizó en el sistema de autenticación.'),
+                '⚠️ Ese correo ya está en uso por otra cuenta. Se guardó en tu perfil, pero no se actualizó en el sistema de autenticación.',
+              ),
               duration: Duration(seconds: 5),
             ),
           );
@@ -197,7 +183,8 @@ class _PerfilPageState extends State<PerfilPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                  '⚠️ El correo se guardó en tu perfil, pero no se pudo actualizar en el sistema de login.'),
+                '⚠️ El correo se guardó en tu perfil, pero no se pudo actualizar en el sistema de login.',
+              ),
               duration: Duration(seconds: 4),
             ),
           );
@@ -220,9 +207,9 @@ class _PerfilPageState extends State<PerfilPage> {
           ? '✅ Perfil actualizado correctamente.'
           : '✅ Email guardado en tu perfil.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensaje)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
     } else {
       setState(() => _guardando = false);
     }
@@ -361,7 +348,8 @@ class _PerfilPageState extends State<PerfilPage> {
                                 // queda fuera del alcance de esta fase.
                                 TextField(
                                   controller: TextEditingController(
-                                      text: widget.nombreUsuario),
+                                    text: widget.nombreUsuario,
+                                  ),
                                   readOnly: true, // No se puede editar
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
@@ -387,17 +375,20 @@ class _PerfilPageState extends State<PerfilPage> {
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: const BorderSide(
-                                          color: AppColores.borderColor),
+                                        color: AppColores.borderColor,
+                                      ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: const BorderSide(
-                                          color: AppColores.borderColor),
+                                        color: AppColores.borderColor,
+                                      ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(10),
                                       borderSide: const BorderSide(
-                                          color: AppColores.borderColor),
+                                        color: AppColores.borderColor,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -417,7 +408,8 @@ class _PerfilPageState extends State<PerfilPage> {
                                     prefixIcon: Icon(Icons.email_outlined),
                                     hintText: 'ejemplo@correo.com',
                                     hintStyle: TextStyle(
-                                        color: AppColores.borderColor),
+                                      color: AppColores.borderColor,
+                                    ),
                                     helperText:
                                         'Necesario para recuperar tu contraseña',
                                     helperStyle: TextStyle(
@@ -434,16 +426,15 @@ class _PerfilPageState extends State<PerfilPage> {
                                   width: double.infinity, // Ocupa todo el ancho
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor:
-                                          AppColores.orangePrimary,
+                                      backgroundColor: AppColores.orangePrimary,
                                       foregroundColor: Colors.white,
                                       disabledBackgroundColor:
                                           AppColores.borderColor,
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
+                                        vertical: 16,
+                                      ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       elevation: 4,
                                     ),
@@ -468,8 +459,9 @@ class _PerfilPageState extends State<PerfilPage> {
                                       ),
                                     ),
                                     // Deshabilitamos el botón mientras procesa
-                                    onPressed:
-                                        _guardando ? null : _guardarCambios,
+                                    onPressed: _guardando
+                                        ? null
+                                        : _guardarCambios,
                                   ),
                                 ),
                               ],
@@ -487,8 +479,7 @@ class _PerfilPageState extends State<PerfilPage> {
                           decoration: BoxDecoration(
                             color: AppColores.bgCard.withOpacity(0.6),
                             borderRadius: BorderRadius.circular(12),
-                            border:
-                                Border.all(color: AppColores.borderColor),
+                            border: Border.all(color: AppColores.borderColor),
                           ),
                           child: const Row(
                             crossAxisAlignment: CrossAxisAlignment.start,

@@ -17,10 +17,6 @@ import 'package:flutter/foundation.dart'; // Para debugPrint y kIsWeb (aunque aq
 // y gestiona los permisos de galería internamente en Android 10+ (API 29+),
 // por lo que ya no necesitamos pedirlos manualmente en esos dispositivos.
 import 'package:gal/gal.dart';
-// ── ELIMINADO: image_gallery_saver/image_gallery_saver.dart ─────────────────
-// ── ELIMINADO: permission_handler (ya no hace falta para la galería) ─────────
-// Nota: si usas permission_handler en OTROS sitios de la app, no lo borres
-// del pubspec.yaml. Solo lo quitamos de este archivo porque gal lo reemplaza.
 import 'package:path_provider/path_provider.dart'; // Obtiene la carpeta de Descargas en Windows/macOS/Linux
 
 // Función universal que guarda el archivo en la ubicación correcta

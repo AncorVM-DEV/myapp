@@ -4,23 +4,22 @@ import 'package:myapp/utils/sanitizer.dart'; // Sanitización de inputs antes de
 import 'package:myapp/widgets/app_colores.dart';
 
 // ── SECCIÓN DE SUBTAREAS CONECTADA A SUPABASE ─────────────────────────────────
-// Este widget lista las subtareas de la tabla 'subtasks' y permite
-// marcar cada una como completada, añadir nuevas y eliminarlas.
-// Respeta el diseño oscuro de la app y la paleta de colores de AppColores.
+// Widget que lista las subtareas de la tabla 'subtasks' y deja marcarlas
+// como hechas, añadir nuevas y borrarlas. Usa los colores de AppColores.
 //
-// [FASE 1B — CORRECCIÓN DEFINITIVA]
-// El enfoque anterior usaba .stream() de Supabase, que mantiene una caché
-// interna propia. El problema: cuando llegaba un evento INSERT (nueva subtarea),
-// Supabase reconstruía la lista desde su caché, que todavía contenía los
-// elementos borrados porque los eventos DELETE de esa caché llegan con retraso.
-// Resultado: las subtareas borradas reaparecían al añadir una nueva.
+// Nota importante sobre por qué NO usamos .stream() de Supabase:
+// Antes tiraba de .stream() y me volvía loco un bug de subtareas fantasma.
+// Resulta que .stream() tiene su propia caché interna y los eventos DELETE
+// llegan con retraso. Entonces pasaba esto: borrabas una subtarea, añadías
+// otra, y al llegar el INSERT Supabase reconstruía la lista desde su caché
+// (que aún tenía la borrada dentro) → la subtarea borrada volvía a aparecer.
 //
-// Solución: sustituimos .stream() por fetch manual (_cargarSubtareas).
-//   · initState() hace la carga inicial.
-//   · Cada operación (toggle, eliminar, añadir) muta la lista local al instante
-//     para respuesta inmediata y luego refresca con _cargarSubtareas().
-//   · La BD siempre es la fuente de verdad; la lista local solo da velocidad visual.
-//   · Sin caché de stream → sin datos fantasma.
+// Al final lo resolví haciendo fetch manual con _cargarSubtareas():
+//   - initState() hace la carga inicial
+//   - Al togglear, borrar o añadir muto la lista local al momento (para que
+//     se vea el cambio al instante) y luego recargo desde la BD
+//   - La BD manda, la lista local solo es para que la UI responda rápido
+//
 class SeccionSubtareas extends StatefulWidget {
   // El ID de la tarea padre para filtrar sus subtareas en Supabase
   final String taskId;

@@ -187,8 +187,7 @@ void mostrarCentroNotificacionesTareas({
                           );
                         }
 
-                        if (!snapshot.hasData ||
-                            snapshot.data!.isEmpty) {
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
                           return _buildEstadoVacioNotif(
                             'No hay tareas en este proyecto.',
                           );
@@ -202,12 +201,16 @@ void mostrarCentroNotificacionesTareas({
                           // En el nuevo esquema 'done' equivale a iscompleted == true
                           if (data['status'] == 'done') return false;
                           // Si el usuario ya la marcó como leída la ocultamos
-                          if (notificacionesLeidas.contains(data['id'] as String))
+                          if (notificacionesLeidas.contains(
+                            data['id'] as String,
+                          ))
                             return false;
                           // Si no tiene 'due_date' la descartamos silenciosamente
                           if (data['due_date'] == null) return false;
                           // Supabase devuelve la fecha como String ISO 8601, la parseamos
-                          final fecha = DateTime.parse(data['due_date'] as String);
+                          final fecha = DateTime.parse(
+                            data['due_date'] as String,
+                          );
                           // Mostramos las que vencen ANTES del límite de alerta
                           // incluyendo las que ya vencieron (fecha en el pasado)
                           return fecha.isBefore(limiteAlerta) ||
@@ -226,7 +229,9 @@ void mostrarCentroNotificacionesTareas({
                           itemBuilder: (context, index) {
                             final data = tareasEnAlerta[index];
                             // Parseamos la fecha ISO 8601 que nos devuelve Supabase
-                            final fecha = DateTime.parse(data['due_date'] as String);
+                            final fecha = DateTime.parse(
+                              data['due_date'] as String,
+                            );
                             final color = colorFechaLimite(fecha, diasTemp);
                             // En el nuevo esquema el nombre de la tarea es 'title'
                             final nombreTarea = data['title'] ?? 'Sin nombre';
@@ -299,7 +304,7 @@ void mostrarCentroNotificacionesTareas({
                                     size: 20,
                                   ),
                                   // ── Botón "Marcar como leída" ───────────
-                                  // Al pulsar el ✓ el ID se guarda en el set local
+                                  // Al pulsar el tick de okey el ID se guarda en el set local
                                   // y la notificación desaparece de la lista + badge.
                                   const SizedBox(width: 4),
                                   GestureDetector(
@@ -307,7 +312,9 @@ void mostrarCentroNotificacionesTareas({
                                       // --- MIGRACIÓN A SUPABASE ---
                                       // El ID ahora es un UUID String, no un doc.id de Firestore
                                       setStateNotif(() {
-                                        notificacionesLeidas.add(data['id'] as String);
+                                        notificacionesLeidas.add(
+                                          data['id'] as String,
+                                        );
                                       });
                                       // Reconstruimos el badge del AppBar
                                       onActualizarEstado();

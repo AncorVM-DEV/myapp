@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'; // FileOptions, FileOpt
 import 'package:myapp/main.dart' show supabase;
 import 'package:myapp/widgets/app_colores.dart';
 
-// ── [FASE 1B] SECCIÓN DE ARCHIVOS ADJUNTOS ───────────────────────────────────
+// ── SECCIÓN DE ARCHIVOS ADJUNTOS ───────────────────────────────────
 // Widget que gestiona la subida, listado y visualización de adjuntos de una tarea.
 //
 // FLUJO COMPLETO:
@@ -24,20 +24,7 @@ import 'package:myapp/widgets/app_colores.dart';
 //   - Imágenes → miniatura cuadrada que al tocar abre un visor de pantalla completa.
 //   - Documentos → icono representativo del tipo de archivo + nombre + botón de abrir
 //     que lanza la URL con url_launcher.
-//
-// PAQUETES NECESARIOS (añadir a pubspec.yaml):
-//   file_picker: ^8.1.2
-//   url_launcher: ^6.3.0
-//
-// CONFIGURACIÓN EXTRA EN ANDROID (android/app/src/main/AndroidManifest.xml):
-//   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-//   <!-- Dentro de <application>: -->
-//   <queries>
-//     <intent>
-//       <action android:name="android.intent.action.VIEW" />
-//       <data android:scheme="https" />
-//     </intent>
-//   </queries>
+
 class SeccionAdjuntos extends StatefulWidget {
   final String taskId;
 
@@ -168,7 +155,7 @@ class _SeccionAdjuntosState extends State<SeccionAdjuntos> {
             'user_id': userId,
             'file_name': nombre,
             'file_url': publicUrl,
-            'file_extension': extension, // columna nueva añadida en Fase 1B
+            'file_extension': extension,
           })
           .select() // Recuperamos el registro creado con su id y timestamps
           .single();

@@ -15,11 +15,13 @@ class AppColores {
   // ── COLORES PARA LAS PRIORIDADES DE LAS TAREAS ───────────────────────────
   // Cada nivel de urgencia tiene su color distintivo para la franja lateral
   // de la tarjeta y para los filtros. Son los mismos colores que usaría ClickUp.
-  static const prioUrgente = Color(0xFFFF4757); // Rojo vivo → urgente de verdad
-  static const prioAlta    = Color(0xFFFFD43B); // Amarillo → hay que estar al tanto
-  static const prioNormal  = Color(0xFF4FC3F7); // Azul claro → flujo normal
-  static const prioBaja    = Color(0xFF90A4AE); // Gris azulado → cuando se pueda
-  static const prioNinguna = Color(0xFF4A4E66); // Igual que el borde → sin urgencia
+  static const prioUrgente = Color(0xFFFF4757); // Rojo vivo → Priodiad urgente
+  static const prioAlta = Color(0xFFFFD43B); // Amarillo → Prioridad alta
+  static const prioNormal = Color(0xFF4FC3F7); // Azul claro → Prioridad normal
+  static const prioBaja = Color(0xFF90A4AE); // Gris claro → Baja prioridad
+  static const prioNinguna = Color(
+    0xFF4A4E66,
+  ); // Igual que el borde → sin urgencia
 }
 
 // ── HELPER: ICONO SEGÚN EL ESTADO ────────────────────────────────────────────
@@ -51,10 +53,12 @@ Widget imagenSegunEstado(String estado) {
 // valor diferente configurado por el usuario.
 Color colorFechaLimite(DateTime fecha, int diasAntelacion) {
   final hoy = DateTime.now();
-  final diferencia =
-      fecha.difference(DateTime(hoy.year, hoy.month, hoy.day)).inDays;
+  final diferencia = fecha
+      .difference(DateTime(hoy.year, hoy.month, hoy.day))
+      .inDays;
   if (diferencia < 0) return const Color(0xFFFF6B6B); // Venció → rojo
-  if (diferencia <= diasAntelacion) return const Color(0xFFFFB347); // Próximo → naranja
+  if (diferencia <= diasAntelacion)
+    return const Color(0xFFFFB347); // Próximo → naranja
   return const Color(0xFF48D136); // Con tiempo → verde
 }
 
@@ -62,8 +66,9 @@ Color colorFechaLimite(DateTime fecha, int diasAntelacion) {
 // Convierte los días que faltan en un texto amigable para el usuario.
 String textoFechaLimite(DateTime fecha) {
   final hoy = DateTime.now();
-  final diferencia =
-      fecha.difference(DateTime(hoy.year, hoy.month, hoy.day)).inDays;
+  final diferencia = fecha
+      .difference(DateTime(hoy.year, hoy.month, hoy.day))
+      .inDays;
   if (diferencia < 0) return 'Venció hace ${-diferencia} día(s)';
   if (diferencia == 0) return '¡Vence hoy!';
   if (diferencia == 1) return 'Vence mañana';
@@ -120,22 +125,32 @@ String enumAStatus(String enumVal) {
 // Devuelve el color de la franja lateral según la prioridad de la tarea
 Color colorPrioridad(String? prioridad) {
   switch (prioridad) {
-    case 'urgent': return AppColores.prioUrgente;
-    case 'high':   return AppColores.prioAlta;
-    case 'normal': return AppColores.prioNormal;
-    case 'low':    return AppColores.prioBaja;
-    default:       return AppColores.prioNinguna; // 'none' y cualquier otro
+    case 'urgent':
+      return AppColores.prioUrgente;
+    case 'high':
+      return AppColores.prioAlta;
+    case 'normal':
+      return AppColores.prioNormal;
+    case 'low':
+      return AppColores.prioBaja;
+    default:
+      return AppColores.prioNinguna; // 'none' y cualquier otro
   }
 }
 
 // Devuelve el emoji de la prioridad para mostrar junto al nombre
 String emojiPrioridad(String? prioridad) {
   switch (prioridad) {
-    case 'urgent': return '🔴';
-    case 'high':   return '🟡';
-    case 'normal': return '🔵';
-    case 'low':    return '⚪';
-    default:       return '—'; // Sin prioridad
+    case 'urgent':
+      return '🔴';
+    case 'high':
+      return '🟡';
+    case 'normal':
+      return '🔵';
+    case 'low':
+      return '⚪';
+    default:
+      return '—'; // Sin prioridad
   }
 }
 
@@ -144,7 +159,11 @@ String emojiPrioridad(String? prioridad) {
 Widget iconoPrioridad(String? prioridad, {double size = 14}) {
   switch (prioridad) {
     case 'urgent':
-      return Icon(Icons.flag_rounded, color: AppColores.prioUrgente, size: size);
+      return Icon(
+        Icons.flag_rounded,
+        color: AppColores.prioUrgente,
+        size: size,
+      );
     case 'high':
       return Icon(Icons.flag_rounded, color: AppColores.prioAlta, size: size);
     case 'normal':
@@ -152,18 +171,27 @@ Widget iconoPrioridad(String? prioridad, {double size = 14}) {
     case 'low':
       return Icon(Icons.flag_outlined, color: AppColores.prioBaja, size: size);
     default:
-      return Icon(Icons.flag_outlined, color: AppColores.prioNinguna, size: size);
+      return Icon(
+        Icons.flag_outlined,
+        color: AppColores.prioNinguna,
+        size: size,
+      );
   }
 }
 
 // Devuelve el texto legible para el humano
 String textoPrioridad(String? prioridad) {
   switch (prioridad) {
-    case 'urgent': return 'Urgente';
-    case 'high':   return 'Alta';
-    case 'normal': return 'Normal';
-    case 'low':    return 'Baja';
-    default:       return 'Sin prioridad';
+    case 'urgent':
+      return 'Urgente';
+    case 'high':
+      return 'Alta';
+    case 'normal':
+      return 'Normal';
+    case 'low':
+      return 'Baja';
+    default:
+      return 'Sin prioridad';
   }
 }
 
@@ -171,10 +199,15 @@ String textoPrioridad(String? prioridad) {
 // Menor número = más urgente → aparecerá primero en la lista.
 int ordenPrioridad(String? prioridad) {
   switch (prioridad) {
-    case 'urgent': return 0;
-    case 'high':   return 1;
-    case 'normal': return 2;
-    case 'low':    return 3;
-    default:       return 4; // 'none' va al final
+    case 'urgent':
+      return 0;
+    case 'high':
+      return 1;
+    case 'normal':
+      return 2;
+    case 'low':
+      return 3;
+    default:
+      return 4; // 'none' va al final
   }
 }

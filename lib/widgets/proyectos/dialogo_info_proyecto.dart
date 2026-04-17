@@ -20,7 +20,7 @@ Future<Map<String, int>> _obtenerEstadisticas(String projectId) async {
 }
 
 // ── DIÁLOGO DE INFORMACIÓN DEL PROYECTO (con gestión de miembros) ─────────────
-// Fase 2 — Objetivo 1: se añade la sección "Miembros" con:
+// Se añade la sección "Miembros" con:
 //   • Botón que abre el diálogo de gestión de miembros
 //   • Invitar por username exacto
 //   • Listado con roles y opciones de cambio/expulsión (solo owner/admin)
@@ -41,7 +41,7 @@ void mostrarDialogoInfoProyecto({
       final nombreEditCont = TextEditingController(text: projectName);
       final descEditCont = TextEditingController(text: projectDescription);
 
-      // Variables mutables del closure — misma razón que antes:
+      // Variables mutables del closure:
       // deben vivir fuera del builder del StatefulBuilder para no resetearse
       // en cada rebuild causado por setStateLocal()
       String estadoEditable = projectEstado;
@@ -349,7 +349,7 @@ void mostrarDialogoInfoProyecto({
                           const SizedBox(height: 8),
 
                           // ── BOTÓN MIEMBROS ─────────────────────────────────
-                          // [FASE 2] Nuevo botón que abre el diálogo de gestión
+                          // Nuevo botón que abre el diálogo de gestión
                           // de miembros del proyecto.
                           SizedBox(
                             width: double.infinity,
@@ -465,7 +465,7 @@ void mostrarDialogoInfoProyecto({
 // ════════════════════════════════════════════════════════════════════════════════
 // DIÁLOGO DE GESTIÓN DE MIEMBROS
 // ════════════════════════════════════════════════════════════════════════════════
-// [FASE 2 — Objetivo 1] Muestra la lista de miembros actuales del proyecto
+// Muestra la lista de miembros actuales del proyecto
 // y permite al owner/admin invitar nuevos miembros por username exacto,
 // cambiar roles y expulsar miembros.
 //
@@ -480,7 +480,7 @@ void mostrarDialogoMiembros({
   required String projectName,
   required void Function(String mensaje, {bool esError}) onMostrarSnackbar,
 }) {
-  // [FIX] Usamos _DialogoMiembrosContent (StatefulWidget) en lugar de StatefulBuilder.
+  // Fix del tema de android para invitar a gente: Usamos _DialogoMiembrosContent (StatefulWidget) en lugar de StatefulBuilder.
   // Antes, el TextEditingController y el FocusNode se creaban dentro del builder
   // de showDialog, por lo que Flutter los destruía y reconstruía en cada rebuild
   // provocado por cambios de MediaQuery (ej. aparición del teclado en Android).
@@ -526,7 +526,7 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
   bool _buscando = false;
 
   // ── Future cacheado de miembros ──────────────────────────────────────────
-  // CRÍTICO: guardamos el Future en el State para no recrearlo en cada build().
+  // Guardamos el Future en el State para no recrearlo en cada build().
   // Si pasáramos _obtenerMiembros() directamente al parámetro future: del
   // FutureBuilder, Flutter crearía un nuevo objeto Future en cada rebuild
   // causado por MediaQuery (apertura del teclado), el FutureBuilder volvería
@@ -568,7 +568,9 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
             .map((m) => m['role'] as String)
             .firstOrNull ??
         'user';
-    setState(() => _puedeGestionar = rolActual == 'owner' || rolActual == 'admin');
+    setState(
+      () => _puedeGestionar = rolActual == 'owner' || rolActual == 'admin',
+    );
   }
 
   // ── Recarga la lista de miembros ─────────────────────────────────────────
@@ -591,7 +593,10 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
     // Sanitizamos el username antes de consultar la base de datos
     final username = Sanitizer.cleanUsername(_usernameCont.text);
     if (username.isEmpty) {
-      widget.onMostrarSnackbar('Escribe un username para buscar', esError: true);
+      widget.onMostrarSnackbar(
+        'Escribe un username para buscar',
+        esError: true,
+      );
       return;
     }
 
@@ -627,14 +632,14 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
         return;
       }
 
-      // BUG 3 CORREGIDO: antes se consultaba project_members sin filtrar
+      // Antes se consultaba project_members sin filtrar
       // por 'status', por lo que una invitación en 'pending' bloqueaba
       // cualquier reintento y, peor aún, un status NULL (por el upsert
       // del owner sin campo status) podría causar comportamientos inesperados.
       // Ahora consultamos el status explícitamente y diferenciamos los casos:
-      //   • 'accepted' → el usuario ya es miembro activo, no tiene sentido reinvitar.
-      //   • 'pending'  → ya tiene una invitación esperando, informamos sin crashear.
-      //   • sin fila   → podemos invitar con total seguridad.
+      //   • 'accepted' = el usuario ya es miembro activo, no tiene sentido reinvitar.
+      //   • 'pending'  = ya tiene una invitación esperando, informamos sin crashear.
+      //   • sin fila   = podemos invitar con total seguridad.
       // Paso 2: comprobar si ya existe alguna fila para este user en el proyecto
       final miembrosExistentes = await supabase
           .from('project_members')
@@ -671,7 +676,7 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
         'project_id': widget.projectId,
         'user_id': invitadoId,
         'role': 'user',
-        'status': 'pending', // ← CRÍTICO: sin este campo la invitación es invisible
+        'status': 'pending', // Sin este campo la invitación es invisible
       });
 
       _usernameCont.clear();
@@ -688,7 +693,6 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
     }
   }
 
-  // ── Cambiar rol de un miembro ────────────────────────────────────────────
   // ── Cambiar rol de un miembro ────────────────────────────────────────────
   Future<void> _cambiarRol(String userId, String nuevoRol) async {
     try {
@@ -752,9 +756,9 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
 
   @override
   Widget build(BuildContext context) {
-    // [FIX Bug 1] Patrón AlertDialog a prueba de balas para TextField + listas:
-    //   AlertDialog (insetPadding fijo) → content: SizedBox(maxFinite) →
-    //   SingleChildScrollView → Column(min) → ListView(shrinkWrap + NeverScroll).
+    // Patrón AlertDialog para TextField + listas:
+    //   AlertDialog (insetPadding fijo) = content: SizedBox(maxFinite) =
+    //   SingleChildScrollView = Column(min) = ListView(shrinkWrap + NeverScroll).
     // AlertDialog gestiona automáticamente el espacio del teclado; SizedBox
     // evita que el diálogo se encoja a lo ancho; la Column hace shrink-wrap;
     // ListView con NeverScrollableScrollPhysics no pelea con el scroll padre.
@@ -887,8 +891,9 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppColores.orangePrimary
-                                        .withOpacity(0.2),
+                                    color: AppColores.orangePrimary.withOpacity(
+                                      0.2,
+                                    ),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
@@ -917,8 +922,7 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
                                 final uid = miembro['user_id'] as String;
                                 final rol = miembro['role'] as String;
                                 final perfil =
-                                    miembro['perfil']
-                                        as Map<String, dynamic>?;
+                                    miembro['perfil'] as Map<String, dynamic>?;
                                 final nombre =
                                     perfil?['full_name'] as String? ??
                                     perfil?['username'] as String? ??
@@ -963,9 +967,9 @@ class _DialogoMiembrosContentState extends State<_DialogoMiembrosContent> {
                     ),
 
                     // ── Campo de invitación (FUERA del FutureBuilder) ──
-                    // CRÍTICO: siempre montado gracias a _puedeGestionar (State).
-                    // Si estuviera dentro del builder, cada recarga (→ waiting)
-                    // lo desmontaría → foco perdido → teclado cerrado.
+                    // Siempre montado gracias a _puedeGestionar (State).
+                    // Si estuviera dentro del builder, cada recarga (= waiting)
+                    // lo desmontaría = foco perdido = teclado cerrado.
                     if (_puedeGestionar) ...[
                       const SizedBox(height: 16),
                       const Divider(color: AppColores.borderColor),
@@ -1132,8 +1136,7 @@ Future<List<Map<String, dynamic>>> _obtenerMiembros(String projectId) async {
     for (final p in perfiles) p['id'] as String: p,
   };
 
-  // Paso 3: unimos los datos
-  // Paso 3: unimos incluyendo el status para mostrarlo en la UI
+  // Paso 3: unimos los datos incluyendo el status para mostrarlo en la UI
   return memberships.map((m) {
     return {
       'user_id': m['user_id'],

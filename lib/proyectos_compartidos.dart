@@ -1,25 +1,4 @@
 // ── PANTALLA: PROYECTOS COMPARTIDOS + SISTEMA DE INVITACIONES ─────────────────
-//
-// ESTRUCTURA VISUAL (siempre visible, independientemente del estado):
-//
-//   ┌─ AppBar ──────────────────────────────────────────────────────────┐
-//   │  "Compartido conmigo"  [badge nº invitaciones]  [campana]        │
-//   └───────────────────────────────────────────────────────────────────┘
-//   ┌─ SECCIÓN 1: INVITACIONES PENDIENTES ──────────────────────────────┐
-//   │  Tarjeta por cada pending → botones [Aceptar] [Rechazar]          │
-//   │  Si no hay invitaciones → mensaje "Sin invitaciones pendientes"   │
-//   └───────────────────────────────────────────────────────────────────┘
-//   ┌─ SECCIÓN 2: MIS PROYECTOS COMPARTIDOS ────────────────────────────┐
-//   │  TarjetaProyecto por cada proyecto con status='accepted' + 2+ M   │
-//   │  Si no hay proyectos → mensaje "Aún no tienes proyectos..."       │
-//   └───────────────────────────────────────────────────────────────────┘
-//
-// ACEPTAR / RECHAZAR:
-//   Usan RPCs con SECURITY DEFINER (supabase.rpc) en lugar de UPDATE/DELETE
-//   directo sobre project_members. Esto bypasea los problemas de RLS sin
-//   comprometer la seguridad, ya que la función valida auth.uid() internamente.
-//
-// ──────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -110,7 +89,7 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // CONSULTA 1: INVITACIONES PENDIENTES
+  // INVITACIONES PENDIENTES
   // ─────────────────────────────────────────────────────────────────────────
   Future<void> _cargarInvitaciones(String userId) async {
     if (!mounted) return;
@@ -144,7 +123,7 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
           .select('id, name, description, created_by, estado')
           .inFilter('id', idsPendientes);
 
-      // Enriquecemos con el nombre del creador
+      // Nombre del creador
       final resultado = <Map<String, dynamic>>[];
       for (final p in proyectosPendientes) {
         String ownerNombre = 'Alguien';
@@ -185,7 +164,7 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // CONSULTA 2: PROYECTOS ACEPTADOS
+  // PROYECTOS ACEPTADOS
   // ─────────────────────────────────────────────────────────────────────────
   Future<void> _cargarProyectosAceptados(String userId) async {
     if (!mounted) return;
@@ -263,25 +242,17 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
 
   // ─────────────────────────────────────────────────────────────────────────
   // ACEPTAR INVITACIÓN — usa RPC SECURITY DEFINER para bypassear RLS
-  //
-  // ¿Por qué RPC y no .update() directo?
-  //   El error 42501 ("new row violates row-level security") ocurre porque
-  //   las políticas FOR UPDATE tienen una restricción circular: el WITH CHECK
-  //   del INSERT requería ser ya owner/admin, dejando la tabla en un estado
-  //   inconsistente que contamina el UPDATE. La RPC se ejecuta como el
-  //   propietario de la BD (SECURITY DEFINER), validando auth.uid() dentro
-  //   de la función → cero conflictos de RLS.
   // ─────────────────────────────────────────────────────────────────────────
   Future<void> _aceptarInvitacion(Map<String, dynamic> proyecto) async {
     final userId = supabase.auth.currentUser!.id;
     final projectId = proyecto['id'] as String;
     final projectName = proyecto['name'] as String;
 
-    // ① Respuesta visual inmediata (patrón optimista)
+    // 1 Respuesta visual inmediata (patrón optimista)
     setState(() => _invitaciones.removeWhere((i) => i['id'] == projectId));
 
     try {
-      // ② Llamamos a la RPC — función SQL con SECURITY DEFINER
+      // 2 Llamamos a la RPC — función SQL con SECURITY DEFINER
       //    Definición en Supabase SQL Editor:
       //      CREATE OR REPLACE FUNCTION public.aceptar_invitacion(p_project_id UUID)
       //      RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
@@ -317,17 +288,17 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // RECHAZAR INVITACIÓN — usa RPC SECURITY DEFINER
+  // RECHAZAR INVITACIÓN — RPC SECURITY DEFINER
   // ─────────────────────────────────────────────────────────────────────────
   Future<void> _rechazarInvitacion(Map<String, dynamic> proyecto) async {
     final projectId = proyecto['id'] as String;
     final projectName = proyecto['name'] as String;
 
-    // ① Respuesta visual inmediata
+    // 1 Respuesta visual inmediata
     setState(() => _invitaciones.removeWhere((i) => i['id'] == projectId));
 
     try {
-      // ② Llamamos a la RPC — hace DELETE solo si la fila es pending y del usuario
+      // 2 Llamamos a la RPC — hace DELETE solo si la fila es pending y del usuario
       //    CREATE OR REPLACE FUNCTION public.rechazar_invitacion(p_project_id UUID)
       final respuesta = await supabase.rpc(
         'rechazar_invitacion',
@@ -343,7 +314,7 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
 
       if (mounted) _mostrarSnackbar('Invitación a "$projectName" rechazada');
     } catch (e) {
-      // ③ Revertimos si la RPC falló
+      // 3 Revertimos si la RPC falló
       if (mounted) {
         setState(() => _invitaciones.add(proyecto));
         _mostrarSnackbar('Error al rechazar: $e', esError: true);
@@ -671,7 +642,7 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // ══════════════════════════════════════════════════
-                          // SECCIÓN 1: INVITACIONES PENDIENTES
+                          // INVITACIONES PENDIENTES
                           // ══════════════════════════════════════════════════
                           _SeccionInvitaciones(
                             cargando: _cargandoInvitaciones,
@@ -683,7 +654,7 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
                           const SizedBox(height: 20),
 
                           // ══════════════════════════════════════════════════
-                          // SECCIÓN 2: PROYECTOS COMPARTIDOS ACEPTADOS
+                          // PROYECTOS COMPARTIDOS ACEPTADOS
                           // ══════════════════════════════════════════════════
                           _SeccionProyectosAceptados(
                             cargando: _cargandoProyectos,
@@ -708,7 +679,7 @@ class _ProyectosCompartidosState extends State<ProyectosCompartidos> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WIDGET: SECCIÓN 1 — INVITACIONES PENDIENTES
+// WIDGET:  INVITACIONES PENDIENTES
 // ─────────────────────────────────────────────────────────────────────────────
 class _SeccionInvitaciones extends StatelessWidget {
   final bool cargando;
@@ -833,7 +804,7 @@ class _SeccionInvitaciones extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WIDGET: SECCIÓN 2 — PROYECTOS COMPARTIDOS ACEPTADOS
+// WIDGET:  PROYECTOS COMPARTIDOS ACEPTADOS
 // ─────────────────────────────────────────────────────────────────────────────
 class _SeccionProyectosAceptados extends StatelessWidget {
   final bool cargando;

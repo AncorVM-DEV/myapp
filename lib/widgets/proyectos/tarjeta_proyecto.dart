@@ -142,7 +142,7 @@ class TarjetaProyecto extends StatelessWidget {
                   color: AppColores.bgCard,
                   iconColor: AppColores.textMuted,
                   onSelected: (String result) async {
-                    // <--- 1. AÑADIR async
+                    // 1. AÑADIR async
                     try {
                       // 2. AÑADIR await
                       await supabase
@@ -153,7 +153,7 @@ class TarjetaProyecto extends StatelessWidget {
                             projectId,
                           ); // Usamos la variable projectId que definiste al principio del build
 
-                      // Opcional: Mostrar feedback visual
+                      // Mostrar feedback visual
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Estado actualizado')),

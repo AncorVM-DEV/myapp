@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // Carga credenciales desde .env
 import 'package:flutter_localizations/flutter_localizations.dart'; // Para el calendario en español
 import 'package:supabase_flutter/supabase_flutter.dart';
-// ── FASE 2: NotificationService eliminado ─────────────────────────────────────
-// Ya no usamos notificaciones push locales (flutter_local_notifications).
+// ── NotificationService eliminado ─────────────────────────────────────
 // Las alertas ahora se envían por correo electrónico a través de una Edge Function
 // de Supabase. Ver: lib/services/email_service.dart
-import 'package:myapp/splash.dart'; // [FASE 1A] Pantalla de carga con timeout y animación
+import 'package:myapp/splash.dart'; // Pantalla de carga con timeout y animación
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Necesario para inicializar plugins antes de arrancar la UI
@@ -19,11 +18,6 @@ void main() async {
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-
-  // ── FASE 2: ya no llamamos a NotificationService.init() ───────────────────
-  // Se eliminó la inicialización de push locales. Sin esa llamada ya no se
-  // solicitan permisos de alarmas/notificaciones al arrancar la app.
-
   runApp(const MyApp());
 }
 
@@ -32,9 +26,6 @@ final supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
-  // [FASE 1A] La lógica de _resolverPantallaInicial() vive en SplashScreen.
-  // MyApp solo configura el tema y los delegates de localización.
 
   @override
   Widget build(BuildContext context) {
@@ -48,9 +39,7 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'ES'),
-      ],
+      supportedLocales: const [Locale('es', 'ES')],
       locale: const Locale('es', 'ES'),
 
       // Paleta de colores global de la app
@@ -84,7 +73,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
 
-      // [FASE 1A] El SplashScreen decide a qué pantalla navegar según la sesión
+      // El SplashScreen decide a qué pantalla navegar según la sesión
       home: const SplashScreen(),
     );
   }

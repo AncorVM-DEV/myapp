@@ -34,7 +34,10 @@ void mostrarDialogoEdicionProyecto({
             SizedBox(width: 8),
             Text(
               'Editar proyecto',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
@@ -55,7 +58,10 @@ void mostrarDialogoEdicionProyecto({
                   counterStyle: const TextStyle(color: AppColores.textMuted),
                   filled: true,
                   fillColor: const Color(0xFF23253A),
-                  prefixIcon: const Icon(Icons.folder_outlined, color: AppColores.orangePrimary),
+                  prefixIcon: const Icon(
+                    Icons.folder_outlined,
+                    color: AppColores.orangePrimary,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: const BorderSide(color: AppColores.borderColor),
@@ -66,7 +72,10 @@ void mostrarDialogoEdicionProyecto({
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColores.orangePrimary, width: 2),
+                    borderSide: const BorderSide(
+                      color: AppColores.orangePrimary,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -86,7 +95,10 @@ void mostrarDialogoEdicionProyecto({
                   fillColor: const Color(0xFF23253A),
                   prefixIcon: const Padding(
                     padding: EdgeInsets.only(bottom: 44),
-                    child: Icon(Icons.notes_rounded, color: AppColores.orangePrimary),
+                    child: Icon(
+                      Icons.notes_rounded,
+                      color: AppColores.orangePrimary,
+                    ),
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -98,7 +110,10 @@ void mostrarDialogoEdicionProyecto({
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColores.orangePrimary, width: 2),
+                    borderSide: const BorderSide(
+                      color: AppColores.orangePrimary,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -113,7 +128,10 @@ void mostrarDialogoEdicionProyecto({
               editDescCont.dispose();
               Navigator.pop(editCtx);
             },
-            child: const Text('Cancelar', style: TextStyle(color: AppColores.textMuted)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppColores.textMuted),
+            ),
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -131,7 +149,9 @@ void mostrarDialogoEdicionProyecto({
               final nuevaDesc = editDescCont.text.trim();
 
               if (nuevoNombre.isEmpty || nuevaDesc.isEmpty) {
-                onMostrarSnackbar('El nombre y la descripción no pueden estar vacíos.');
+                onMostrarSnackbar(
+                  'El nombre y la descripción no pueden estar vacíos.',
+                );
                 return;
               }
 
@@ -140,11 +160,11 @@ void mostrarDialogoEdicionProyecto({
               // Antes también había que hacer un batch update en Firestore para sincronizar
               // el campo 'padre' en todas las tareas. Con Supabase eso ya NO hace falta:
               // las tareas apuntan al proyecto por su UUID, que nunca cambia aunque
-              // el nombre sí lo haga. ¡Adiós a ese bug de raíz!
-              await supabase.from('projects').update({
-                'name': nuevoNombre,
-                'description': nuevaDesc,
-              }).eq('id', projectId);
+              // el nombre sí lo haga.
+              await supabase
+                  .from('projects')
+                  .update({'name': nuevoNombre, 'description': nuevaDesc})
+                  .eq('id', projectId);
 
               // Liberamos los controladores temporales
               editNombreCont.dispose();
