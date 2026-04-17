@@ -4,7 +4,7 @@
 
 ### 👨‍💻 Autores del Proyecto
 * **Ancor Valentín Martín** - [AncorVM-DEV](https://github.com/AncorVM-DEV)
-* **David Rodríguez Castellano** - [UsuarioDeDavid](https://github.com/UsuarioDeDavid)
+* **David Rodríguez Castellano** - [D4v1drc](https://github.com/D4v1drc)
 * **Borja García Betancor** - [UsuarioDeBorja](https://github.com/UsuarioDeBorja)
 
 ---
