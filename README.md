@@ -1,7 +1,6 @@
 # PRO TASK
 
 > Aplicación de gestión de proyectos y tareas desarrollada con **Flutter** y **Supabase**, disponible en Web, Windows, Android e iOS.
-> Creado por: AncorVM-DEV y
 ---
 
 ## 📋 Índice
