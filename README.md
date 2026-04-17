@@ -2,6 +2,11 @@
 
 > Aplicación de gestión de proyectos y tareas desarrollada con **Flutter** y **Supabase**, disponible en Web, Windows, Android e iOS.
 
+### 👨‍💻 Autores del Proyecto
+* **Ancor Valentín Martín** - [AncorVM-DEV](https://github.com/AncorVM-DEV)
+* **David Rodríguez Castellano** - [D4v1drc](https://github.com/D4v1drc)
+* **Borja García Betancor** - [UsuarioDeBorja](https://github.com/UsuarioDeBorja)
+
 ---
 
 ## 📋 Índice
